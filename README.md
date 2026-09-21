@@ -56,7 +56,9 @@ npm start
 | `BETTER_AUTH_URL` | Public app URL (`https://watch.accura.dev` in prod) |
 | `OWNER_EMAIL` | Solo allowed email (default `dany@accura.dev`) |
 | `NEXT_PUBLIC_APP_URL` | Public origin (`https://watch.accura.dev`) |
-| `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | Optional Sentry connector |
+| `SENTRY_AUTH_TOKEN` | Optional — Sentry API token |
+| `SENTRY_ORG` | Global org slug (default `accura-9m`) |
+| `SENTRY_PROJECT` | Optional transitional fallback only — prefer `Site.config.sentryProject` |
 
 See `.env.example`.
 
@@ -74,8 +76,19 @@ See `.env.example`.
 Registry: `src/lib/connectors/registry.ts`
 
 - `health` — HEAD site URL, latency + up/down
-- `sentry` — unresolved issues count (or `not configured`)
+- `sentry` — unresolved issues count per site via `Site.config.sentryProject` (brieform, directoryfast). Sites without that field are skipped. Dashboard KPI sums unresolved across configured sites.
 - `posthog` / `gsc` / `ahrefs` — stubs returning `not configured`
+
+## Watched sites (seed)
+
+| Slug | URL | Sentry project |
+|------|-----|----------------|
+| `accura` | https://accura.dev | — |
+| `brieform` | https://brieform.app | `brieform` |
+| `directoryfast` | https://directoryfa.st | `directoryfast` |
+| `watch` | https://watch.accura.dev | — |
+
+Cron calls `ensureWatchedSites()` so config lands even without a manual seed.
 
 ## DevOps / preview
 
@@ -83,7 +96,8 @@ Registry: `src/lib/connectors/registry.ts`
 2. Set env vars from `.env.example` (`CRON_SECRET`, `BETTER_AUTH_*`, `OWNER_EMAIL`, `DATABASE_URL`).
 3. Deploy **main** — live domain `https://watch.accura.dev`.
 4. Cron hits `/api/cron/collect` hourly (`vercel.json`); Vercel sends the `CRON_SECRET` Authorization header automatically when configured.
-5. Run `npx prisma db push` once against Neon, then `npm run db:seed`.
+5. Run `npx prisma db push` once against Neon (adds `Site.config`), then `npm run db:seed` (or wait for cron).
+6. Optional: set `SENTRY_AUTH_TOKEN` + `SENTRY_ORG=accura-9m` when Danny provides the token.
 
 ## Licence
 
