@@ -1,3 +1,5 @@
+import type { SiteConfig } from "@/lib/site-config";
+
 export type ConnectorId =
   | "health"
   | "sentry"
@@ -19,6 +21,7 @@ export type ConnectorContext = {
   siteId: string;
   siteUrl: string;
   siteName: string;
+  siteConfig?: SiteConfig;
 };
 
 export type Connector = {
