@@ -1,6 +1,9 @@
 /**
  * Seed watched Sites (accura, brieform, directoryfast, watch).
  * Usage: DATABASE_URL=... node scripts/seed-sites.mjs
+ *
+ * posthogProjectId lands when Danny sends the PostHog project mapping —
+ * do NOT invent project IDs here. Keep existing sentryProject seeds.
  */
 import { PrismaClient } from "@prisma/client";
 
