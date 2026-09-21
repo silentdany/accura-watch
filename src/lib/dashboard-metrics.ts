@@ -55,12 +55,61 @@ async function latest(source: string, key: string) {
   });
 }
 
+/** Latest Sentry unresolved per site that reports a count (skip / not configured excluded). */
+async function aggregateSentryUnresolved(): Promise<{
+  total: number | null;
+  configuredSites: number;
+  latestAt: Date | null;
+  anyError: boolean;
+}> {
+  const sites = await prisma.site.findMany({
+    where: { active: true },
+    select: { id: true },
+  });
+
+  let total = 0;
+  let configuredSites = 0;
+  let latestAt: Date | null = null;
+  let anyError = false;
+
+  for (const site of sites) {
+    const snap = await prisma.metricSnapshot.findFirst({
+      where: { siteId: site.id, source: "sentry", key: "unresolved" },
+      orderBy: { collectedAt: "desc" },
+    });
+    if (!snap) continue;
+
+    const text = snap.valueText ?? "";
+    if (text === "skipped" || text === "not configured") continue;
+
+    if (text === "error") {
+      anyError = true;
+      configuredSites += 1;
+      if (!latestAt || snap.collectedAt > latestAt) latestAt = snap.collectedAt;
+      continue;
+    }
+
+    if (typeof snap.value === "number" && Number.isFinite(snap.value)) {
+      total += snap.value;
+      configuredSites += 1;
+      if (!latestAt || snap.collectedAt > latestAt) latestAt = snap.collectedAt;
+    }
+  }
+
+  return {
+    total: configuredSites > 0 ? total : null,
+    configuredSites,
+    latestAt,
+    anyError,
+  };
+}
+
 /** Overview KPIs + health + incidents from MetricSnapshot (no mocks). */
 export async function loadDashboardData(): Promise<DashboardData> {
   const [
     healthUp,
     healthLatency,
-    sentryUnresolved,
+    sentryAgg,
     posthogStub,
     gscStub,
     ahrefsStub,
@@ -70,7 +119,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   ] = await Promise.all([
     latest("health", "up"),
     latest("health", "latency_ms"),
-    latest("sentry", "unresolved"),
+    aggregateSentryUnresolved(),
     latest("posthog", "stub"),
     latest("gsc", "stub"),
     latest("ahrefs", "stub"),
@@ -79,7 +128,14 @@ export async function loadDashboardData(): Promise<DashboardData> {
       where: {
         OR: [
           { source: "health", key: "up", value: 0 },
-          { source: "sentry", key: "unresolved", value: { gt: 0 } },
+          {
+            source: "sentry",
+            key: "unresolved",
+            value: { gt: 0 },
+            NOT: {
+              valueText: { in: ["skipped", "not configured"] },
+            },
+          },
           { source: "sentry", key: "unresolved", valueText: "error" },
         ],
       },
@@ -111,16 +167,19 @@ export async function loadDashboardData(): Promise<DashboardData> {
         ? `Last check ${ago(healthUp.collectedAt)}`
         : "No health snapshot yet - run cron";
 
-  const sentryConfigured =
-    sentryUnresolved != null &&
-    sentryUnresolved.valueText !== "not configured";
-  const sentryCount = sentryUnresolved?.value;
+  const sentryConfigured = sentryAgg.configuredSites > 0;
   const sentryTone: KpiCardProps["tone"] = !sentryConfigured
     ? "default"
-    : sentryUnresolved?.valueText === "error" ||
-        (typeof sentryCount === "number" && sentryCount > 0)
+    : sentryAgg.anyError || (sentryAgg.total != null && sentryAgg.total > 0)
       ? "warn"
       : "good";
+
+  const sentryHint = !sentryConfigured
+    ? "No Sentry sites (set Site.config.sentryProject)"
+    : sentryAgg.anyError
+      ? `Error on one or more sites | ${sentryAgg.configuredSites} sites`
+      : `Unresolved (sum) | ${sentryAgg.configuredSites} sites` +
+        (sentryAgg.latestAt ? ` | ${ago(sentryAgg.latestAt)}` : "");
 
   const kpis: KpiCardProps[] = [
     {
@@ -133,12 +192,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     {
       id: "sentry",
       label: "Sentry",
-      value: sentryConfigured
-        ? String(sentryCount ?? sentryUnresolved?.valueText ?? "-")
-        : "-",
-      hint: sentryConfigured
-        ? `Unresolved | ${ago(sentryUnresolved!.collectedAt)}`
-        : "Not configured (SENTRY_*)",
+      value: sentryConfigured ? String(sentryAgg.total ?? "-") : "-",
+      hint: sentryHint,
       tone: sentryTone,
     },
     {

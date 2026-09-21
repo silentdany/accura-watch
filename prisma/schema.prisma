@@ -1,4 +1,4 @@
-// Accura Watch V1 — Better Auth + Site + MetricSnapshot
+// Accura Watch V1 - Better Auth + Site + MetricSnapshot
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,7 +8,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Better Auth (standard Prisma schema) ───────────────────────────────────
+// Better Auth (standard Prisma schema)
 
 model User {
   id            String    @id
@@ -73,7 +73,7 @@ model Verification {
   @@map("verification")
 }
 
-// ─── Accura Watch domain ────────────────────────────────────────────────────
+// Accura Watch domain
 
 model Site {
   id        String   @id @default(cuid())
@@ -81,6 +81,8 @@ model Site {
   slug      String   @unique
   url       String
   active    Boolean  @default(true)
+  /// Per-site connector config, e.g. { "sentryProject": "brieform" }
+  config    Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -89,7 +91,7 @@ model Site {
   @@index([active])
 }
 
-/// Point-in-time metrics for a site (health, Sentry, PostHog, GSC, Ahrefs, …)
+/// Point-in-time metrics for a site (health, Sentry, PostHog, GSC, Ahrefs, ...)
 model MetricSnapshot {
   id          String   @id @default(cuid())
   siteId      String
