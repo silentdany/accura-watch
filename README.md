@@ -11,7 +11,7 @@ Danny solo · V1 · Console graphite UI · Better Auth + Prisma wire.
 - **Next.js** App Router (TypeScript) + **React 19** + **Tailwind CSS 4**
 - **Prisma** (`User`/`Session`/`Account`/`Verification` + `Site`/`MetricSnapshot`) → Postgres / Neon
 - **Better Auth** email/password (`src/lib/auth.ts`) — solo `OWNER_EMAIL`
-- Connectors: **health** + **Sentry** + PostHog / GSC / Ahrefs placeholders
+- Connectors: **health** + **Sentry** + **PostHog** + GSC / Ahrefs placeholders
 - Cron: `GET /api/cron/collect` guarded by `CRON_SECRET` — writes `MetricSnapshot`
 - Deploy: **Vercel** (`next.config.ts`, `vercel.json` hourly cron)
 
@@ -59,6 +59,8 @@ npm start
 | `SENTRY_AUTH_TOKEN` | Optional — Sentry API token |
 | `SENTRY_ORG` | Global org slug (default `accura-9m`) |
 | `SENTRY_PROJECT` | Optional transitional fallback only — prefer `Site.config.sentryProject` |
+| `POSTHOG_API_KEY` | Optional — PostHog personal API key |
+| `POSTHOG_HOST` | PostHog API host (default `https://eu.posthog.com`; US: `https://app.posthog.com`) |
 
 See `.env.example`.
 
@@ -77,16 +79,24 @@ Registry: `src/lib/connectors/registry.ts`
 
 - `health` — HEAD site URL, latency + up/down
 - `sentry` — unresolved issues count per site via `Site.config.sentryProject` (brieform, directoryfast). Sites without that field are skipped. Dashboard KPI sums unresolved across configured sites.
-- `posthog` / `gsc` / `ahrefs` — stubs returning `not configured`
+- `posthog` — `activeUsers7d` + `pageviews7d` per site via `Site.config.posthogProjectId` (aliases: `posthogProject`, `projectId`). Env: `POSTHOG_API_KEY` (global) + `POSTHOG_HOST` (default EU). Sites without project id are skipped. Dashboard KPI sums `activeUsers7d` across configured sites.
+- `gsc` / `ahrefs` — stubs returning `not configured`
+
+### PostHog (per-site)
+
+1. Set `POSTHOG_API_KEY` (Personal API Key) and optionally `POSTHOG_HOST` (`https://eu.posthog.com` default, or `https://app.posthog.com` for US).
+2. Put the numeric project id on each watched site: `Site.config.posthogProjectId` (or aliases `posthogProject` / `projectId`).
+3. Cron collects Trends via `POST /api/projects/{id}/query/` (`$pageview` math `total` / `unique`, fallback `dau`).
+4. Project mapping from Danny is still pending — seed does **not** invent PostHog ids yet.
 
 ## Watched sites (seed)
 
-| Slug | URL | Sentry project |
-|------|-----|----------------|
-| `accura` | https://accura.dev | — |
-| `brieform` | https://brieform.app | `brieform` |
-| `directoryfast` | https://directoryfa.st | `directoryfast` |
-| `watch` | https://watch.accura.dev | — |
+| Slug | URL | Sentry project | PostHog project |
+|------|-----|----------------|-----------------|
+| `accura` | https://accura.dev | — | — (pending mapping) |
+| `brieform` | https://brieform.app | `brieform` | — (pending mapping) |
+| `directoryfast` | https://directoryfa.st | `directoryfast` | — (pending mapping) |
+| `watch` | https://watch.accura.dev | — | — (pending mapping) |
 
 Cron calls `ensureWatchedSites()` so config lands even without a manual seed.
 
@@ -98,6 +108,7 @@ Cron calls `ensureWatchedSites()` so config lands even without a manual seed.
 4. Cron hits `/api/cron/collect` hourly (`vercel.json`); Vercel sends the `CRON_SECRET` Authorization header automatically when configured.
 5. Run `npx prisma db push` once against Neon (adds `Site.config`), then `npm run db:seed` (or wait for cron).
 6. Optional: set `SENTRY_AUTH_TOKEN` + `SENTRY_ORG=accura-9m` when Danny provides the token.
+7. Optional: set `POSTHOG_API_KEY` + `POSTHOG_HOST`, then add `posthogProjectId` per site when Danny sends the mapping.
 
 ## Licence
 
