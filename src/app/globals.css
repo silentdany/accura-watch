@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/*
+  Accura Console — graphite dark tokens
+  primary #3DDEA8 = hsl(158 70% 55%)
+  bg      = hsl(220 10% 7%)
+*/
+:root {
+  --background: 220 10% 7%;
+  --foreground: 210 20% 96%;
+  --muted: 220 8% 14%;
+  --muted-foreground: 215 10% 55%;
+  --card: 220 9% 10%;
+  --card-foreground: 210 20% 96%;
+  --border: 220 8% 18%;
+  --primary: 158 70% 55%;
+  --primary-foreground: 220 10% 7%;
+  --accent: 158 70% 55%;
+  --accent-foreground: 220 10% 7%;
+  --destructive: 0 72% 51%;
+  --ring: 158 70% 55%;
+  --sidebar: 220 10% 5%;
+  --topbar: 220 10% 8%;
+  --success: 158 70% 45%;
+  --warning: 38 92% 50%;
+
+  --radius: 10px;
+  --sidebar-width: 240px;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-border: hsl(var(--border));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-ring: hsl(var(--ring));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-topbar: hsl(var(--topbar));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-md: var(--radius);
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  min-height: 100%;
+}
+
+::selection {
+  background: hsl(158 70% 55% / 0.35);
+  color: hsl(var(--foreground));
+}
