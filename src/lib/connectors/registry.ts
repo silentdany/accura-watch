@@ -1,13 +1,13 @@
 import { healthConnector } from "./health";
+import { posthogConnector } from "./posthog";
 import { sentryConnector } from "./sentry";
 import type { Connector, ConnectorId } from "./types";
 
 /**
- * Connector registry — health + Sentry live; others are placeholders for V1.
+ * Connector registry — health + Sentry + PostHog live; GSC / Ahrefs placeholders for V1.
  */
 const stubs: Connector[] = (
   [
-    ["posthog", "PostHog"],
     ["gsc", "GSC"],
     ["ahrefs", "Ahrefs DR"],
   ] as const
@@ -30,6 +30,7 @@ const stubs: Connector[] = (
 export const connectors: Connector[] = [
   healthConnector,
   sentryConnector,
+  posthogConnector,
   ...stubs,
 ];
 
