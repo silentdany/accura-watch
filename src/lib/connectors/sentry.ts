@@ -1,25 +1,49 @@
 import type { Connector, ConnectorResult } from "./types";
 
 /**
- * Sentry connector — unresolved issue count when SENTRY_* env is set;
- * otherwise returns ok:false / valueText "not configured".
+ * Sentry connector - per-site project via Site.config.sentryProject.
+ * Env: SENTRY_AUTH_TOKEN + SENTRY_ORG (default accura-9m).
+ * No sentryProject on site -> skipped (not an error).
+ * Optional SENTRY_PROJECT env = transitional fallback only.
  */
 export const sentryConnector: Connector = {
   id: "sentry",
   label: "Sentry",
-  async collect() {
+  async collect(ctx) {
     const token = process.env.SENTRY_AUTH_TOKEN;
-    const org = process.env.SENTRY_ORG;
-    const project = process.env.SENTRY_PROJECT;
+    const org = process.env.SENTRY_ORG ?? "accura-9m";
+    const project =
+      ctx.siteConfig?.sentryProject ?? process.env.SENTRY_PROJECT ?? null;
 
-    if (!token || !org || !project) {
+    if (!project) {
+      return [
+        {
+          source: "sentry",
+          key: "unresolved",
+          valueText: "skipped",
+          ok: true,
+          meta: {
+            configured: false,
+            skipped: true,
+            reason: "no sentryProject",
+          },
+        },
+      ];
+    }
+
+    if (!token) {
       return [
         {
           source: "sentry",
           key: "unresolved",
           valueText: "not configured",
           ok: false,
-          meta: { configured: false },
+          meta: {
+            configured: false,
+            org,
+            project,
+            reason: "missing SENTRY_AUTH_TOKEN",
+          },
         },
       ];
     }
@@ -51,6 +75,8 @@ export const sentryConnector: Connector = {
             error: `Sentry API ${res.status}`,
             meta: {
               configured: true,
+              org,
+              project,
               status: res.status,
               bodyPreview: text.slice(0, 200),
             },
@@ -88,7 +114,7 @@ export const sentryConnector: Connector = {
           valueText: "error",
           ok: false,
           error: message,
-          meta: { configured: true, stub: false },
+          meta: { configured: true, org, project },
         },
       ];
     }
