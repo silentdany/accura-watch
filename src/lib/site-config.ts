@@ -2,6 +2,8 @@
 export type SiteConfig = {
   /** Sentry project slug under SENTRY_ORG (e.g. brieform). Absent = skip Sentry. */
   sentryProject?: string;
+  /** PostHog project id (numeric string). Absent = skip PostHog for this site. */
+  posthogProjectId?: string;
 };
 
 export function parseSiteConfig(raw: unknown): SiteConfig {
@@ -11,5 +13,15 @@ export function parseSiteConfig(raw: unknown): SiteConfig {
     typeof o.sentryProject === "string" && o.sentryProject.trim()
       ? o.sentryProject.trim()
       : undefined;
-  return { sentryProject };
+
+  const posthogRaw =
+    o.posthogProjectId ?? o.posthogProject ?? o.projectId;
+  const posthogProjectId =
+    typeof posthogRaw === "string" && posthogRaw.trim()
+      ? posthogRaw.trim()
+      : typeof posthogRaw === "number" && Number.isFinite(posthogRaw)
+        ? String(posthogRaw)
+        : undefined;
+
+  return { sentryProject, posthogProjectId };
 }
