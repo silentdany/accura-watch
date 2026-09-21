@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectors } from "@/lib/connectors/registry";
 import { prisma } from "@/lib/prisma";
-import { ensureAccuraSite } from "@/lib/seed-site";
+import { parseSiteConfig } from "@/lib/site-config";
+import { ensureWatchedSites } from "@/lib/seed-site";
 import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  await ensureAccuraSite();
+  await ensureWatchedSites();
 
   const sites = await prisma.site.findMany({
     where: { active: true },
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest) {
   const summaries: CollectSummary[] = [];
 
   for (const site of sites) {
+    const siteConfig = parseSiteConfig(site.config);
     const results = (
       await Promise.all(
         connectors.map((c) =>
@@ -53,6 +55,7 @@ export async function GET(req: NextRequest) {
             siteId: site.id,
             siteName: site.name,
             siteUrl: site.url,
+            siteConfig,
           }),
         ),
       )
