@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectors } from "@/lib/connectors/registry";
+import { prisma } from "@/lib/prisma";
+import { ensureAccuraSite } from "@/lib/seed-site";
+import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,12 +11,14 @@ type CollectSummary = {
   siteId: string;
   siteName: string;
   siteUrl: string;
+  written: number;
   results: Awaited<ReturnType<(typeof connectors)[number]["collect"]>>;
 };
 
 /**
  * Vercel Cron / manual collect endpoint.
  * Requires: Authorization: Bearer <CRON_SECRET>
+ * Reads active Sites from Prisma, runs connectors, writes MetricSnapshot rows.
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -31,14 +36,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  // V1: single mock site until Prisma Site rows exist
-  const sites = [
-    {
-      siteId: "mock-accura",
-      siteName: "Accura",
-      siteUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://accura.dev",
-    },
-  ];
+  await ensureAccuraSite();
+
+  const sites = await prisma.site.findMany({
+    where: { active: true },
+    orderBy: { slug: "asc" },
+  });
 
   const summaries: CollectSummary[] = [];
 
@@ -47,15 +50,39 @@ export async function GET(req: NextRequest) {
       await Promise.all(
         connectors.map((c) =>
           c.collect({
-            siteId: site.siteId,
-            siteName: site.siteName,
-            siteUrl: site.siteUrl,
+            siteId: site.id,
+            siteName: site.name,
+            siteUrl: site.url,
           }),
         ),
       )
     ).flat();
 
-    summaries.push({ ...site, results });
+    let written = 0;
+    for (const result of results) {
+      await prisma.metricSnapshot.create({
+        data: {
+          siteId: site.id,
+          source: result.source,
+          key: result.key,
+          value: result.value ?? null,
+          valueText: result.valueText ?? null,
+          meta: (result.meta ??
+            (result.error
+              ? { error: result.error, ok: result.ok }
+              : { ok: result.ok })) as Prisma.InputJsonValue,
+        },
+      });
+      written += 1;
+    }
+
+    summaries.push({
+      siteId: site.id,
+      siteName: site.name,
+      siteUrl: site.url,
+      written,
+      results,
+    });
   }
 
   return NextResponse.json({

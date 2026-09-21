@@ -1,12 +1,12 @@
 import { healthConnector } from "./health";
+import { sentryConnector } from "./sentry";
 import type { Connector, ConnectorId } from "./types";
 
 /**
- * Connector registry — health is live stub; others are placeholders for V1.
+ * Connector registry — health + Sentry live; others are placeholders for V1.
  */
 const stubs: Connector[] = (
   [
-    ["sentry", "Sentry"],
     ["posthog", "PostHog"],
     ["gsc", "GSC"],
     ["ahrefs", "Ahrefs DR"],
@@ -27,7 +27,11 @@ const stubs: Connector[] = (
   },
 }));
 
-export const connectors: Connector[] = [healthConnector, ...stubs];
+export const connectors: Connector[] = [
+  healthConnector,
+  sentryConnector,
+  ...stubs,
+];
 
 export function getConnector(id: ConnectorId): Connector | undefined {
   return connectors.find((c) => c.id === id);
