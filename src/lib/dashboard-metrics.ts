@@ -104,13 +104,62 @@ async function aggregateSentryUnresolved(): Promise<{
   };
 }
 
+/** Latest PostHog activeUsers7d per site (skip / not configured excluded). */
+async function aggregatePosthogActiveUsers(): Promise<{
+  total: number | null;
+  configuredSites: number;
+  latestAt: Date | null;
+  anyError: boolean;
+}> {
+  const sites = await prisma.site.findMany({
+    where: { active: true },
+    select: { id: true },
+  });
+
+  let total = 0;
+  let configuredSites = 0;
+  let latestAt: Date | null = null;
+  let anyError = false;
+
+  for (const site of sites) {
+    const snap = await prisma.metricSnapshot.findFirst({
+      where: { siteId: site.id, source: "posthog", key: "activeUsers7d" },
+      orderBy: { collectedAt: "desc" },
+    });
+    if (!snap) continue;
+
+    const text = snap.valueText ?? "";
+    if (text === "skipped" || text === "not configured") continue;
+
+    if (text === "error") {
+      anyError = true;
+      configuredSites += 1;
+      if (!latestAt || snap.collectedAt > latestAt) latestAt = snap.collectedAt;
+      continue;
+    }
+
+    if (typeof snap.value === "number" && Number.isFinite(snap.value)) {
+      total += snap.value;
+      configuredSites += 1;
+      if (!latestAt || snap.collectedAt > latestAt) latestAt = snap.collectedAt;
+    }
+  }
+
+  return {
+    total: configuredSites > 0 ? total : null,
+    configuredSites,
+    latestAt,
+    anyError,
+  };
+}
+
 /** Overview KPIs + health + incidents from MetricSnapshot (no mocks). */
 export async function loadDashboardData(): Promise<DashboardData> {
   const [
     healthUp,
     healthLatency,
     sentryAgg,
-    posthogStub,
+    posthogAgg,
     gscStub,
     ahrefsStub,
     sites,
@@ -120,7 +169,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     latest("health", "up"),
     latest("health", "latency_ms"),
     aggregateSentryUnresolved(),
-    latest("posthog", "stub"),
+    aggregatePosthogActiveUsers(),
     latest("gsc", "stub"),
     latest("ahrefs", "stub"),
     prisma.site.findMany({ where: { active: true }, orderBy: { slug: "asc" } }),
@@ -181,6 +230,20 @@ export async function loadDashboardData(): Promise<DashboardData> {
       : `Unresolved (sum) | ${sentryAgg.configuredSites} sites` +
         (sentryAgg.latestAt ? ` | ${ago(sentryAgg.latestAt)}` : "");
 
+  const posthogConfigured = posthogAgg.configuredSites > 0;
+  const posthogTone: KpiCardProps["tone"] = !posthogConfigured
+    ? "default"
+    : posthogAgg.anyError
+      ? "warn"
+      : "good";
+
+  const posthogHint = !posthogConfigured
+    ? "No PostHog sites (set Site.config.posthogProjectId)"
+    : posthogAgg.anyError
+      ? `Error on one or more sites | ${posthogAgg.configuredSites} sites`
+      : `Active users 7d (sum) | ${posthogAgg.configuredSites} sites` +
+        (posthogAgg.latestAt ? ` | ${ago(posthogAgg.latestAt)}` : "");
+
   const kpis: KpiCardProps[] = [
     {
       id: "health",
@@ -199,11 +262,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     {
       id: "posthog",
       label: "PostHog",
-      value: "-",
-      hint: posthogStub
-        ? `Stub | ${ago(posthogStub.collectedAt)}`
-        : "Not configured",
-      tone: "default",
+      value: posthogConfigured ? String(posthogAgg.total ?? "-") : "-",
+      hint: posthogHint,
+      tone: posthogTone,
     },
     {
       id: "gsc",
