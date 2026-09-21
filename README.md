@@ -53,9 +53,9 @@ npm start
 | `DATABASE_URL` | Postgres (Neon) |
 | `CRON_SECRET` | Bearer token for `/api/cron/collect` |
 | `BETTER_AUTH_SECRET` | Auth secret (≥32 chars) |
-| `BETTER_AUTH_URL` | Public app URL (`https://accura-watch.vercel.app` in prod) |
+| `BETTER_AUTH_URL` | Public app URL (`https://watch.accura.dev` in prod) |
 | `OWNER_EMAIL` | Solo allowed email (default `dany@accura.dev`) |
-| `NEXT_PUBLIC_APP_URL` | Public origin |
+| `NEXT_PUBLIC_APP_URL` | Public origin (`https://watch.accura.dev`) |
 | `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | Optional Sentry connector |
 
 See `.env.example`.
@@ -81,7 +81,7 @@ Registry: `src/lib/connectors/registry.ts`
 
 1. Import `silentdany/accura-watch` in Vercel (or link existing project).
 2. Set env vars from `.env.example` (`CRON_SECRET`, `BETTER_AUTH_*`, `OWNER_EMAIL`, `DATABASE_URL`).
-3. Deploy **main** — preview URLs work on any branch.
+3. Deploy **main** — live domain `https://watch.accura.dev`.
 4. Cron hits `/api/cron/collect` hourly (`vercel.json`); Vercel sends the `CRON_SECRET` Authorization header automatically when configured.
 5. Run `npx prisma db push` once against Neon, then `npm run db:seed`.
 
