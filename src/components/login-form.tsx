@@ -2,11 +2,20 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
+function authErrorMessage(err: unknown, fallback: string): string {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && err !== null) {
+    const o = err as { message?: string; statusText?: string; status?: number };
+    if (o.message) return o.message;
+    if (o.statusText) return `${o.statusText}${o.status ? ` (${o.status})` : ""}`;
+  }
+  return fallback;
+}
+
 export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">(
@@ -24,31 +33,37 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
         const { error: err } = await authClient.signIn.email({
           email,
           password,
+          callbackURL: "/",
         });
         if (err) {
-          setError(err.message ?? "Sign in failed");
+          setError(authErrorMessage(err, "Sign in failed"));
+          setPending(false);
           return;
         }
       } else {
         if (!signupAllowed) {
           setError("Owner account already exists. Sign in instead.");
+          setPending(false);
           return;
         }
         const { error: err } = await authClient.signUp.email({
           email,
           password,
           name: "Danny",
+          callbackURL: "/",
         });
         if (err) {
-          setError(err.message ?? "Sign up failed");
+          setError(authErrorMessage(err, "Sign up failed"));
+          setPending(false);
           return;
         }
       }
-      router.replace("/");
-      router.refresh();
+      // Hard nav so Set-Cookie is on the next document request (soft
+      // router.replace raced middleware and bounced back to /login).
+      window.location.assign("/");
+      return;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Auth request failed");
-    } finally {
+      setError(authErrorMessage(err, "Auth request failed"));
       setPending(false);
     }
   }
@@ -92,7 +107,10 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
             />
           </label>
           {error ? (
-            <p className="text-xs text-destructive" role="alert">
+            <p
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           ) : null}
