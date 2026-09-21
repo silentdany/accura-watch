@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { WATCHED_SITES, type SiteStatus } from "@/lib/sites";
+import type { SiteStatus } from "@/lib/sites";
+import { SignOutButton } from "./sign-out-button";
 
 const statusDot: Record<SiteStatus, string> = {
   up: "bg-primary shadow-[0_0_10px_hsl(158_70%_55%/0.55)]",
@@ -8,7 +9,19 @@ const statusDot: Record<SiteStatus, string> = {
   unknown: "bg-muted-foreground",
 };
 
-export function Sidebar() {
+export type SidebarSite = {
+  slug: string;
+  name: string;
+  status: SiteStatus;
+};
+
+export function Sidebar({
+  userEmail,
+  sites,
+}: {
+  userEmail: string;
+  sites: SidebarSite[];
+}) {
   return (
     <aside
       className="fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border bg-sidebar"
@@ -29,7 +42,7 @@ export function Sidebar() {
           Sites
         </p>
         <ul className="flex flex-col gap-0.5">
-          {WATCHED_SITES.map((site) => (
+          {sites.map((site) => (
             <li key={site.slug}>
               <Link
                 href={`/#site-${site.slug}`}
@@ -53,16 +66,16 @@ export function Sidebar() {
         >
           Overview
         </Link>
-        <Link
-          href="/login"
-          className="rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          Login
-        </Link>
       </nav>
 
-      <div className="border-t border-border p-3 text-[11px] text-muted-foreground">
-        Console graphite · V1
+      <div className="border-t border-border p-3">
+        <p
+          className="truncate px-3 text-[11px] text-muted-foreground"
+          title={userEmail}
+        >
+          {userEmail}
+        </p>
+        <SignOutButton />
       </div>
     </aside>
   );
