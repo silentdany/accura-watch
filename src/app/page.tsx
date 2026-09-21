@@ -2,6 +2,7 @@ import { Shell } from "@/components/shell";
 import { KpiCard, type KpiCardProps } from "@/components/kpi-card";
 import { WATCHED_SITES } from "@/lib/sites";
 import { listConnectors } from "@/lib/connectors/registry";
+import { requireSession } from "@/lib/require-session";
 
 /** Order Spec: Health+Sentry → PostHog → GSC → Ahrefs DR */
 const MOCK_KPIS: KpiCardProps[] = [
@@ -59,7 +60,8 @@ const MOCK_INCIDENTS = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  await requireSession();
   const connectors = listConnectors();
 
   return (

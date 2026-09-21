@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
 /**
- * Protect all routes except /login, /api/auth/*, and /api/cron/*.
- * Cookie presence check only (edge-safe); full session validated server-side.
+ * Edge filter only: cookie presence.
+ * Real proof = auth.api.getSession in requireSession() (server components).
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

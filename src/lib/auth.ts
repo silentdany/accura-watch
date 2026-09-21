@@ -17,6 +17,7 @@ function assertOwnerEmail(email: unknown): void {
 
 /**
  * Better Auth — email/password, Prisma/Neon adapter, solo OWNER_EMAIL gate.
+ * Sign-up blocked once any user exists (H1).
  */
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -30,6 +31,12 @@ export const auth = betterAuth({
       create: {
         before: async (user) => {
           assertOwnerEmail(user.email);
+          const existing = await prisma.user.count();
+          if (existing > 0) {
+            throw new APIError("FORBIDDEN", {
+              message: "Owner account already exists. Sign in instead.",
+            });
+          }
           return { data: user };
         },
       },
@@ -40,6 +47,14 @@ export const auth = betterAuth({
       if (ctx.path === "/sign-in/email" || ctx.path === "/sign-up/email") {
         const body = ctx.body as { email?: string } | undefined;
         assertOwnerEmail(body?.email);
+      }
+      if (ctx.path === "/sign-up/email") {
+        const existing = await prisma.user.count();
+        if (existing > 0) {
+          throw new APIError("FORBIDDEN", {
+            message: "Owner account already exists. Sign in instead.",
+          });
+        }
       }
     }),
   },
