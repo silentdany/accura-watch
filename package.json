@@ -11,10 +11,10 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "db:seed": "node scripts/seed-accura.mjs"
+    "db:seed": "node scripts/seed-sites.mjs"
   },
   "prisma": {
-    "seed": "node scripts/seed-accura.mjs"
+    "seed": "node scripts/seed-sites.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.16.1",
