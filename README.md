@@ -11,7 +11,7 @@ Danny solo · V1 · Console graphite UI · Better Auth + Prisma wire.
 - **Next.js** App Router (TypeScript) + **React 19** + **Tailwind CSS 4**
 - **Prisma** (`User`/`Session`/`Account`/`Verification` + `Site`/`MetricSnapshot`) → Postgres / Neon
 - **Better Auth** email/password (`src/lib/auth.ts`) — solo `OWNER_EMAIL`
-- Connectors: **health** + **Sentry** + PostHog / GSC / Ahrefs placeholders
+- Connectors: **health** + **Sentry** + **GSC** + **Ahrefs DR** (free) + PostHog placeholder
 - Cron: `GET /api/cron/collect` guarded by `CRON_SECRET` — writes `MetricSnapshot`
 - Deploy: **Vercel** (`next.config.ts`, `vercel.json` hourly cron)
 
@@ -59,8 +59,11 @@ npm start
 | `SENTRY_AUTH_TOKEN` | Optional — Sentry API token |
 | `SENTRY_ORG` | Global org slug (default `accura-9m`) |
 | `SENTRY_PROJECT` | Optional transitional fallback only — prefer `Site.config.sentryProject` |
+| `GSC_CLIENT_EMAIL` | Optional — Google SA client email for Search Console |
+| `GSC_PRIVATE_KEY` | Optional — Google SA PEM private key (`\n` escaped OK) |
+| `AHREFS_API_KEY` | Optional — free Ahrefs APIv3 key for Domain Rating |
 
-See `.env.example`.
+See `.env.example`. Connectors **skip** (ok) when secrets or per-site config are absent — cron stays green without them.
 
 ## Routes
 
@@ -77,7 +80,11 @@ Registry: `src/lib/connectors/registry.ts`
 
 - `health` — HEAD site URL, latency + up/down
 - `sentry` — unresolved issues count per site via `Site.config.sentryProject` (brieform, directoryfast). Sites without that field are skipped. Dashboard KPI sums unresolved across configured sites.
-- `posthog` / `gsc` / `ahrefs` — stubs returning `not configured`
+- `gsc` — Search Analytics last 7d (`clicks7d`, `impressions7d`, `ctr`, `position`) via `Site.config.gscSiteUrl` + `GSC_CLIENT_EMAIL` / `GSC_PRIVATE_KEY`. Missing config **or** secrets → skipped. Dashboard KPI = sum of latest `clicks7d` (hint may mention impressions).
+- `ahrefs` — free Domain Rating (`dr`) from `GET /v3/public/domain-rating-free`; target = hostname of `Site.url`. Needs `AHREFS_API_KEY`. No key → skipped. Dashboard KPI = average DR across sites with a numeric snapshot. Attribution: Domain Rating by Ahrefs.
+- `posthog` — stub returning `not configured` (real connector lands via PR #7 — HOLD)
+
+Soft Design UI redesign is backlog (no UI redesign on this scaffold).
 
 ## Watched sites (seed)
 
@@ -88,7 +95,7 @@ Registry: `src/lib/connectors/registry.ts`
 | `directoryfast` | https://directoryfa.st | `directoryfast` |
 | `watch` | https://watch.accura.dev | — |
 
-Cron calls `ensureWatchedSites()` so config lands even without a manual seed.
+Cron calls `ensureWatchedSites()` so config lands even without a manual seed. GSC/Ahrefs site mapping is **not** invented in seed — set `Site.config.gscSiteUrl` when Danny provides property URLs; Ahrefs needs no config id.
 
 ## DevOps / preview
 
@@ -98,6 +105,7 @@ Cron calls `ensureWatchedSites()` so config lands even without a manual seed.
 4. Cron hits `/api/cron/collect` hourly (`vercel.json`); Vercel sends the `CRON_SECRET` Authorization header automatically when configured.
 5. Run `npx prisma db push` once against Neon (adds `Site.config`), then `npm run db:seed` (or wait for cron).
 6. Optional: set `SENTRY_AUTH_TOKEN` + `SENTRY_ORG=accura-9m` when Danny provides the token.
+7. Optional smoke: set `GSC_CLIENT_EMAIL` + `GSC_PRIVATE_KEY` + per-site `gscSiteUrl`, and/or `AHREFS_API_KEY`.
 
 ## Licence
 
