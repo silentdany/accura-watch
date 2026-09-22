@@ -1,16 +1,15 @@
+import { ahrefsConnector } from "./ahrefs";
+import { gscConnector } from "./gsc";
 import { healthConnector } from "./health";
 import { sentryConnector } from "./sentry";
 import type { Connector, ConnectorId } from "./types";
 
 /**
- * Connector registry — health + Sentry live; others are placeholders for V1.
+ * Connector registry — health + Sentry + GSC + Ahrefs live;
+ * PostHog remains a stub until PR #7 (feat/posthog-per-site) merges.
  */
 const stubs: Connector[] = (
-  [
-    ["posthog", "PostHog"],
-    ["gsc", "GSC"],
-    ["ahrefs", "Ahrefs DR"],
-  ] as const
+  [["posthog", "PostHog"]] as const
 ).map(([id, label]) => ({
   id: id as ConnectorId,
   label,
@@ -31,6 +30,8 @@ export const connectors: Connector[] = [
   healthConnector,
   sentryConnector,
   ...stubs,
+  gscConnector,
+  ahrefsConnector,
 ];
 
 export function getConnector(id: ConnectorId): Connector | undefined {
