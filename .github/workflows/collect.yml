@@ -10,4 +10,5 @@ jobs:
     if: ${{ vars.ENABLE_COLLECT_WORKFLOW == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - run: curl -fsS -m 290 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.WATCH_URL }}/api/cron/collect" > /dev/null
+      - run: |
+          curl -fsS -m 290 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.WATCH_URL }}/api/cron/collect" > /dev/null
