@@ -207,9 +207,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         </Link>
       </div>
 
-      <Alerts alerts={o.alerts} />
-
-      <Card>
+      <Card className="mb-6">
         <CardHeader
           title="Sites"
           hint="Click a column to sort · pinned sites stay on top"
@@ -221,6 +219,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         />
         <SitesTable rows={o.sites} range={range} />
       </Card>
+
+      <Alerts alerts={o.alerts} />
     </>
   );
 }
