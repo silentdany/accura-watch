@@ -15,6 +15,7 @@ Guidance for AI coding agents (and humans) working on this repo.
 npm run typecheck
 npm run lint
 npm run build         # needs DATABASE_URL set (any value) at build time
+npm run db:sync       # schema sync (what vercel-build runs); migrates the v0.1 schema
 npx prisma db push    # sync schema to the database
 ```
 

@@ -39,19 +39,12 @@ Open http://localhost:3000 and create the owner account. The first sign-up becom
 
 ### Upgrading from v0.1 (`Site.config` + `MetricSnapshot`)
 
-The schema changed. To keep your existing sites and their Sentry/GSC mappings, run this before `db push`:
-
-```bash
-psql "$DATABASE_URL" -f scripts/migrate-from-v1.sql
-npx prisma db push --accept-data-loss   # drops Site.config and the old MetricSnapshot table
-```
-
-Users and sessions are untouched. History is backfilled on the first sync (16 months of GSC data).
+On Vercel, nothing to do: the build runs `scripts/db-sync.mjs`, which detects the old schema, moves existing sites and their Sentry/GSC mappings to the new columns and drops the old snapshot table. Elsewhere, run `npm run db:sync` once. Users and sessions are untouched, and history is backfilled on the first sync.
 
 ### Deploy on Vercel
 
 1. Import the repo and set the env vars from `.env.example`.
-2. Run `npx prisma db push` once against the production database.
+2. Deploy. The `vercel-build` script syncs the database schema (`scripts/db-sync.mjs`) before building. Additive changes apply automatically; a destructive change fails the build instead of dropping data. Preview deployments that share the production database sync it too.
 3. `vercel.json` schedules `/api/cron/collect` hourly. The **Vercel Hobby** plan only allows daily crons, so either upgrade or enable `.github/workflows/collect.yml` (set the `WATCH_URL` and `CRON_SECRET` secrets and the `ENABLE_COLLECT_WORKFLOW=true` variable). Any external cron hitting the endpoint with `Authorization: Bearer $CRON_SECRET` also works.
 
 ## Data collection
