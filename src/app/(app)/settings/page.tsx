@@ -10,6 +10,7 @@ import { revokeTokenAction } from "@/app/actions";
 import { Card, CardHeader, PageHeader, Pill } from "@/components/ui";
 import { CopyField } from "@/components/forms";
 import { CreateTokenForm, IntegrationForm } from "@/components/settings-forms";
+import { SetupGuide } from "@/components/setup-guide";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings" };
@@ -39,7 +40,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <h2 className="eyebrow mb-3">Integrations</h2>
       <div className="mb-10 grid gap-3 xl:grid-cols-2">
         {integrations.map((i) => (
-          <Card key={i.id} id={i.id} className="scroll-mt-20">
+          <Card key={i.id} id={i.id} className="flex scroll-mt-20 flex-col">
             <CardHeader
               dot={DOT[i.id]}
               title={i.label}
@@ -56,7 +57,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 )
               }
             />
-            <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-1 flex-col gap-4 p-4">
               {i.detail ? <p className="text-xs text-muted-foreground">{i.detail}</p> : null}
               {i.id === "google" ? (
                 <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3">
@@ -82,6 +83,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               {i.source === "env" ? (
                 <p className="text-xs text-muted-foreground">Configured through environment variables. Saving here overrides them.</p>
               ) : null}
+              <SetupGuide provider={i.id} redirectUri={googleRedirectUri()} />
               <IntegrationForm provider={i.id} connected={i.source === "database"} config={i.config} />
             </div>
           </Card>
