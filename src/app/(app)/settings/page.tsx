@@ -38,7 +38,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {sp.connected ? <p className="mb-4 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">Connected {sp.connected} ✓</p> : null}
 
       <h2 className="eyebrow mb-3">Integrations</h2>
-      <div className="mb-10 grid gap-3 xl:grid-cols-2">
+      <div className="mb-10 grid grid-cols-1 gap-3 xl:grid-cols-2">
         {integrations.map((i) => (
           <Card key={i.id} id={i.id} className="flex scroll-mt-20 flex-col">
             <CardHeader
@@ -93,7 +93,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <h2 id="mcp" className="eyebrow mb-3 scroll-mt-20">
         MCP &amp; API
       </h2>
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <Card>
           <CardHeader title="Connect an AI agent" hint="Streamable HTTP MCP server — works with Claude Code, Claude Desktop, Cursor, ChatGPT…" />
           <div className="flex flex-col gap-4 p-4">
@@ -143,7 +143,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Card>
           <Card>
             <CardHeader title={`Tools · ${TOOLS.length}`} hint="Everything the dashboard does, an agent can do" />
-            <ul className="grid gap-x-4 gap-y-1.5 p-4 text-xs sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 p-4 text-xs sm:grid-cols-2">
               {TOOLS.map((t) => (
                 <li key={t.name} className="truncate" title={t.description}>
                   <code className="text-foreground">{t.name}</code> <span className="text-subtle">— {t.title}</span>

@@ -67,7 +67,7 @@ export default async function SitesPage() {
         </div>
       ) : null}
 
-      <div className="mb-8 grid gap-3 lg:grid-cols-2">
+      <div className="mb-8 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <CardHeader title="Import from Search Console" hint="Domain properties are preferred over URL-prefix ones" dot="var(--c-gsc)" />
           <ImportPanel />

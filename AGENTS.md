@@ -23,5 +23,6 @@ npx prisma db push    # sync schema to the database
 
 - Server actions live in `src/app/actions.ts`, are guarded by a session check, and return `ActionState`.
 - Tool inputs are zod schemas converted with `z.toJSONSchema`. Tool errors are returned in-band (`isError: true`).
-- Charts are hand-rolled SVG (`components/chart.tsx`, `components/sparkline.tsx`). Keep one color per source (`--c-gsc`, `--c-posthog`, `--c-sentry`, `--c-health`, `--c-seo`) and never use a dual y-axis.
+- Charts are hand-rolled SVG (`components/chart.tsx`, `components/sparkline.tsx`). Keep one color per source (`--c-gsc`, `--c-posthog`, `--c-sentry`, `--c-health`, `--c-seo`) and never use a dual y-axis: to overlay two measures of different scale, use `TimeSeriesChart indexed` (each series as % of its own average, raw values in the tooltip).
+- Cross-source stats (ratios, correlations, joins between providers) live in `lib/insights.ts`, exposed as `get_site_insights`.
 - Daily metrics use the `DailyMetric` table (`siteId, source, key, date`); rich payloads use `Insight` (`siteId, source, kind`).

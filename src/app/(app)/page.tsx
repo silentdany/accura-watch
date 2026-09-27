@@ -85,7 +85,7 @@ async function Onboarding() {
           Search Console first, then analytics, errors, uptime and domain authority — collected on a schedule and queryable by your AI agents.
         </p>
       </div>
-      <ol className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+      <ol className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
         {steps.map((s, i) => (
           <li key={s.title} className="flex flex-col gap-2 bg-card p-5">
             <span className={`tabular text-xs font-semibold ${s.done ? "text-primary" : "text-subtle"}`}>{s.done ? "✓ Done" : `Step ${i + 1}`}</span>

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { addDays, parseRange, utcDay, ymd } from "@/lib/dates";
 import { loadOverview, loadSiteReport } from "@/lib/metrics";
+import { loadSiteInsights } from "@/lib/insights";
 import {
   autoMatchSites,
   createSite,
@@ -83,6 +84,17 @@ export const TOOLS: ToolDef[] = [
     annotations: { readOnlyHint: true },
     async handler({ site, range }) {
       return loadSiteReport(await resolveSite(site), parseRange(range));
+    },
+  }),
+  tool({
+    name: "get_site_insights",
+    title: "Site insights",
+    description:
+      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, DataForSEO traffic estimate vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20), per-page search share, and authority history.",
+    input: z.object({ site: siteArg, range: rangeArg }),
+    annotations: { readOnlyHint: true },
+    async handler({ site, range }) {
+      return loadSiteInsights(await resolveSite(site), parseRange(range));
     },
   }),
   tool({

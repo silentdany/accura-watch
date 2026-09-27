@@ -11,6 +11,8 @@ import { KpiTile } from "@/components/kpi";
 import { RangeTabs } from "@/components/range-tabs";
 import { SyncButton } from "@/components/forms";
 import { Legend, TimeSeriesChart } from "@/components/chart";
+import { loadSiteInsights } from "@/lib/insights";
+import { AuthorityGlance, CorrelationsCard, InsightTiles, OpportunitiesCard, PagesJoinCard } from "@/components/insights";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -147,9 +149,9 @@ function SeoCard({ r }: { r: SiteReport }) {
     if (detail.openPageRank.globalRank) items.push({ label: "Global rank", value: `#${fmtNum(detail.openPageRank.globalRank)}` });
   }
   return (
-    <Card>
+    <Card id="seo" className="mb-6 scroll-mt-20">
       <CardHeader
-        title="Domain authority"
+        title="Domain SEO"
         dot="var(--c-seo)"
         hint={`${detail?.ahrefs ? "Domain Rating by Ahrefs · " : ""}DataForSEO / Open PageRank${r.seo?.collectedAt ? ` · updated ${ago(r.seo.collectedAt)}` : ""}`}
       />
@@ -186,7 +188,7 @@ export default async function SitePage({ params, searchParams }: Params) {
   const range = parseRange((await searchParams).range);
   const site = await prisma.site.findUnique({ where: { slug } });
   if (!site) notFound();
-  const r = await loadSiteReport(site, range);
+  const [r, insights] = await Promise.all([loadSiteReport(site, range), loadSiteInsights(site, range)]);
 
   const syncErr = (source: string) => r.sync.find((s) => s.source === source && !s.ok)?.error;
 
@@ -264,8 +266,19 @@ export default async function SitePage({ params, searchParams }: Params) {
         />
       </div>
 
-      {/* Search Console */}
-      <h2 className="eyebrow mb-3 mt-8">Search Console</h2>
+      {/* Cross-source insights */}
+      <h2 className="eyebrow mb-3 mt-8">Insights</h2>
+      <InsightTiles i={insights} />
+      <div className="mb-6 grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <CorrelationsCard i={insights} />
+        <OpportunitiesCard i={insights} />
+        <div className="min-w-0 xl:col-span-2">
+          <PagesJoinCard i={insights} />
+        </div>
+      </div>
+
+      {/* Search & SEO */}
+      <h2 className="eyebrow mb-3 mt-8">Search &amp; SEO</h2>
       {!r.config.gscProperty ? (
         <Card className="mb-6">
           <NotMapped what="Search Console property" slug={slug} />
@@ -274,25 +287,41 @@ export default async function SitePage({ params, searchParams }: Params) {
         <Card className="mb-6">{syncErr("gsc") ? <Empty>Sync error: {syncErr("gsc")}</Empty> : <Waiting source="Search Console" />}</Card>
       ) : (
         <>
-          <div className="mb-3 grid gap-3 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader title="Clicks" dot="var(--c-gsc)" hint={`Daily · through ${r.gsc.endDate}`} />
+          <div className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <Card className="min-w-0 lg:col-span-2">
+              <CardHeader
+                title="Clicks & impressions"
+                hint={`Daily · through ${r.gsc.endDate} · each indexed to its own average (100 = average day)`}
+                right={
+                  <Legend
+                    items={[
+                      { name: "Clicks", color: "var(--c-gsc)" },
+                      { name: "Impressions", color: "var(--c-gsc-2)" },
+                    ]}
+                  />
+                }
+              />
               <div className="p-3">
-                <TimeSeriesChart dates={r.gsc.clicksSeries.dates} series={[{ name: "Clicks", color: "var(--c-gsc)", values: r.gsc.clicksSeries.values }]} height={220} />
+                <TimeSeriesChart
+                  dates={r.gsc.clicksSeries.dates}
+                  series={[
+                    { name: "Clicks", color: "var(--c-gsc)", values: r.gsc.clicksSeries.values },
+                    { name: "Impressions", color: "var(--c-gsc-2)", values: r.gsc.impressionsSeries.values },
+                  ]}
+                  extra={[
+                    {
+                      name: "CTR",
+                      format: "pct",
+                      values: r.gsc.clicksSeries.values.map((c, i) => (r.gsc!.impressionsSeries.values[i] ? c / r.gsc!.impressionsSeries.values[i] : null)),
+                    },
+                  ]}
+                  indexed
+                  height={330}
+                />
               </div>
             </Card>
-            <div className="flex flex-col gap-3">
-              <Card>
-                <CardHeader title="Impressions" dot="var(--c-gsc-2)" />
-                <div className="p-3">
-                  <TimeSeriesChart
-                    dates={r.gsc.impressionsSeries.dates}
-                    series={[{ name: "Impressions", color: "var(--c-gsc-2)", values: r.gsc.impressionsSeries.values }]}
-                    height={82}
-                    kind="line"
-                  />
-                </div>
-              </Card>
+            <div className="flex min-w-0 flex-col gap-3">
+              <AuthorityGlance i={insights} />
               <Card>
                 <CardHeader title="Average position" dot="var(--c-gsc)" hint="Lower is better" />
                 <div className="p-3">
@@ -308,7 +337,7 @@ export default async function SitePage({ params, searchParams }: Params) {
               </Card>
             </div>
           </div>
-          <div className="mb-6 grid gap-3 xl:grid-cols-2">
+          <div className="mb-6 grid grid-cols-1 gap-3 xl:grid-cols-2">
             <Card>
               <CardHeader title="Top queries" hint={r.gscTopQueries ? `${r.gscTopQueries.startDate} → ${r.gscTopQueries.endDate} · vs previous 28 days` : undefined} />
               {r.gscTopQueries?.rows.length ? <TopTable rows={r.gscTopQueries.rows} keyLabel="Query" /> : <Empty>No queries yet.</Empty>}
@@ -320,6 +349,7 @@ export default async function SitePage({ params, searchParams }: Params) {
           </div>
         </>
       )}
+      <SeoCard r={r} />
 
       {/* Analytics */}
       <h2 className="eyebrow mb-3 mt-8">Analytics</h2>
@@ -330,7 +360,7 @@ export default async function SitePage({ params, searchParams }: Params) {
       ) : !r.posthog ? (
         <Card className="mb-6">{syncErr("posthog") ? <Empty>Sync error: {syncErr("posthog")}</Empty> : <Waiting source="PostHog" />}</Card>
       ) : (
-        <div className="mb-6 grid gap-3 lg:grid-cols-3">
+        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader
               title="Traffic"
@@ -390,7 +420,7 @@ export default async function SitePage({ params, searchParams }: Params) {
 
       {/* Reliability */}
       <h2 className="eyebrow mb-3 mt-8">Reliability</h2>
-      <div className="mb-6 grid gap-3 lg:grid-cols-2">
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <CardHeader
             title="Response time"
@@ -448,9 +478,6 @@ export default async function SitePage({ params, searchParams }: Params) {
         </Card>
       </div>
 
-      {/* SEO */}
-      <h2 className="eyebrow mb-3 mt-8">Domain SEO</h2>
-      <SeoCard r={r} />
     </>
   );
 }

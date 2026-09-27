@@ -14,6 +14,13 @@ type Props = {
   format?: "number" | "position" | "ms" | "pct";
   dateFormat?: "day" | "datetime";
   emptyLabel?: string;
+  /**
+   * Plot each series as an index of its own period average (100 = average) on one shared axis,
+   * so two measures of different scale can be overlaid without a second y-axis. Tooltip keeps raw values.
+   */
+  indexed?: boolean;
+  /** Extra tooltip-only rows (e.g. CTR under clicks/impressions). */
+  extra?: { name: string; values: (number | null)[]; format?: Props["format"] }[];
 };
 
 const fmt = (v: number | null | undefined, f: Props["format"]) => {
@@ -54,7 +61,18 @@ export function TimeSeriesChart({
   format = "number",
   dateFormat = "day",
   emptyLabel = "No data yet",
+  indexed = false,
+  extra = [],
 }: Props) {
+  const raw = series;
+  series = useMemo(() => {
+    if (!indexed) return raw;
+    return raw.map((s) => {
+      const finite = s.values.filter((v): v is number => v != null && Number.isFinite(v));
+      const mean = finite.reduce((a, v) => a + v, 0) / (finite.length || 1);
+      return { ...s, values: s.values.map((v) => (v == null || !Number.isFinite(v) || !mean ? null : (v / mean) * 100)) };
+    });
+  }, [raw, indexed]);
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [hover, setHover] = useState<number | null>(null);
@@ -224,7 +242,13 @@ export function TimeSeriesChart({
                 <span className="h-0.5 w-2.5 rounded" style={{ background: s.color }} />
                 {s.name}
               </span>
-              <span className="tabular font-semibold text-foreground">{fmt(s.values[hover], format)}</span>
+              <span className="tabular font-semibold text-foreground">{fmt(raw.find((r) => r.name === s.name)?.values[hover], format)}</span>
+            </p>
+          ))}
+          {extra.map((e) => (
+            <p key={e.name} className="mt-0.5 flex items-center justify-between gap-3 border-t border-border pt-0.5">
+              <span className="text-muted-foreground">{e.name}</span>
+              <span className="tabular font-semibold text-foreground">{fmt(e.values[hover], e.format ?? format)}</span>
             </p>
           ))}
         </div>
