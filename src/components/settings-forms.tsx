@@ -15,7 +15,7 @@ function Field({ label, children, hint }: { label: string; children: React.React
 
 function Footer({ pending, state, connected, provider }: { pending: boolean; state: Parameters<typeof Feedback>[0]["state"]; connected: boolean; provider: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-3 sm:col-span-2">
+    <div className="mt-auto flex flex-wrap items-center justify-end gap-3 pt-1">
       <Feedback state={state} />
       {connected ? (
         <button
@@ -48,10 +48,11 @@ export function IntegrationForm({
 }) {
   const c = (k: string, d = "") => (config[k] == null ? d : String(config[k]));
   return (
-    <ActionForm action={saveIntegrationAction} className="grid gap-3 sm:grid-cols-2">
+    <ActionForm action={saveIntegrationAction} className="flex flex-1 flex-col gap-3">
       {(pending, state) => (
         <>
           <input type="hidden" name="provider" value={provider} />
+          <div className="grid gap-3 sm:grid-cols-2">
           {provider === "google" ? (
             <div className="sm:col-span-2">
               <Field
@@ -125,6 +126,7 @@ export function IntegrationForm({
               </Field>
             </div>
           ) : null}
+          </div>
           <Footer pending={pending} state={state} connected={connected} provider={provider} />
         </>
       )}
