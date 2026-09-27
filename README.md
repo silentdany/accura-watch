@@ -65,9 +65,9 @@ On Vercel, nothing to do: the build runs `scripts/db-sync.mjs`, which detects th
 
 | Provider | Credentials | Notes |
 |---|---|---|
-| Google Search Console | OAuth (recommended) or service account | OAuth sees every property on your account. With a service account, add its email as a user on each property. |
+| Google Search Console | OAuth (recommended) or service account (JSON key in Settings, or `GSC_SERVICE_ACCOUNT_JSON` / `GSC_CLIENT_EMAIL` + `GSC_PRIVATE_KEY`; any key formatting is accepted) | OAuth sees every property on your account. With a service account, add its email as a user on each property. |
 | PostHog | Personal API key (`project:read`, `query:read`) + US/EU host | Uses HogQL. If one project tracks several sites, set the site's `$host` filter. |
-| Sentry | Auth token (`org:read`, `project:read`, `event:read`) + optional org slug | Without an org slug, the token's first organization is used. `https://de.sentry.io` for EU, or your self-hosted URL. |
+| Sentry | **User** auth token (`org:read`, `project:read`, `event:read`) + optional org slug | Without an org slug, the token's first organization is used. `https://de.sentry.io` for EU, or your self-hosted URL. |
 | DataForSEO | API login and password | Labs domain overview + Backlinks summary cost about $0.02–0.05 per site per refresh. The location/language codes set the market for keyword data. |
 | Open PageRank | Free API key | 0–10 authority score. |
 | Ahrefs (free) | Free APIv3 key | Domain Rating via `/v3/public/domain-rating-free` (no API units). Shown as **DR**, preferred over other authority scores. |

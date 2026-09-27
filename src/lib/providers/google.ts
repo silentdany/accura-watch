@@ -2,6 +2,7 @@ import { createSign } from "node:crypto";
 import { fetchJson } from "@/lib/http";
 import { appUrl, env } from "@/lib/env";
 import { getGoogleCreds, type GoogleCreds } from "@/lib/integrations";
+import { normalizePrivateKey } from "@/lib/google-key";
 
 export const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -82,8 +83,7 @@ function serviceAccountAssertion(clientEmail: string, privateKey: string): strin
   const signer = createSign("RSA-SHA256");
   signer.update(unsigned);
   signer.end();
-  const pem = privateKey.includes("\\n") ? privateKey.replace(/\\n/g, "\n") : privateKey;
-  return `${unsigned}.${b64url(signer.sign(pem))}`;
+  return `${unsigned}.${b64url(signer.sign(normalizePrivateKey(privateKey)))}`;
 }
 
 async function accessToken(creds: GoogleCreds): Promise<string> {

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptJson, encryptJson } from "@/lib/crypto";
 import { env } from "@/lib/env";
+import { parseServiceAccountJson } from "@/lib/google-key";
 
 /**
  * Provider credentials live in the `Integration` table (set from Settings or
@@ -59,8 +60,13 @@ export async function getGoogleCreds(): Promise<GoogleCreds | null> {
     const privateKey = str(row.secret.privateKey);
     if (clientEmail && privateKey) return { mode: "service_account", clientEmail, privateKey };
   }
-  const clientEmail = env("GSC_CLIENT_EMAIL");
-  const privateKey = env("GSC_PRIVATE_KEY");
+  // Env fallback: a full JSON key (GSC_SERVICE_ACCOUNT_JSON, plain or base64),
+  // or GSC_CLIENT_EMAIL + GSC_PRIVATE_KEY (the key may itself be the JSON file).
+  const json =
+    parseServiceAccountJson(env("GSC_SERVICE_ACCOUNT_JSON") ?? env("GOOGLE_SERVICE_ACCOUNT_JSON")) ??
+    parseServiceAccountJson(env("GSC_PRIVATE_KEY"));
+  const clientEmail = env("GSC_CLIENT_EMAIL") ?? json?.clientEmail ?? null;
+  const privateKey = json?.privateKey ?? env("GSC_PRIVATE_KEY");
   if (clientEmail && privateKey) return { mode: "service_account", clientEmail, privateKey };
   return null;
 }

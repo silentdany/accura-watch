@@ -77,7 +77,7 @@ export function IntegrationForm({
           ) : null}
           {provider === "sentry" ? (
             <>
-              <Field label="Auth token" hint="Sentry → Settings → Auth Tokens (org:read, project:read, event:read).">
+              <Field label="Auth token" hint="User Auth Token (Settings → Account → Personal Tokens) with org:read, project:read, event:read. Organization tokens (sntrys_) can't read issues.">
                 <input name="token" type="password" placeholder={keep(connected) || "sntrys_..."} required={!connected} className="input" autoComplete="off" />
               </Field>
               <Field label="Organization slug" hint="Leave empty to use the token's first organization.">

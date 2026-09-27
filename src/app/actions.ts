@@ -7,6 +7,7 @@ import { autoMatchSites, createSite, deleteSite, importFromGsc, updateSite } fro
 import { deleteIntegration, saveIntegration, type ProviderId } from "@/lib/integrations";
 import { createApiToken, revokeApiToken } from "@/lib/api-tokens";
 import { errorMessage } from "@/lib/http";
+import { normalizePrivateKey } from "@/lib/google-key";
 
 export type ActionState = { ok: boolean; message: string; token?: string } | null;
 
@@ -119,6 +120,7 @@ export async function saveIntegrationAction(_: ActionState, fd: FormData): Promi
           return { ok: false, message: "Invalid JSON" };
         }
         if (!parsed.client_email || !parsed.private_key) return { ok: false, message: "JSON must contain client_email and private_key" };
+        normalizePrivateKey(parsed.private_key); // throws a readable error if unusable
         await saveIntegration("google", { email: parsed.client_email }, {
           clientEmail: parsed.client_email,
           privateKey: parsed.private_key,
