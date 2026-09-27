@@ -1,20 +1,22 @@
 {
   "name": "accura-watch",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Accura Watch — monitoring dashboard for Accura sites (watch.accura.dev)",
+  "version": "0.2.0",
+  "private": false,
+  "license": "MIT",
+  "description": "Open-source, MCP-native dashboard for all your sites: Search Console, PostHog, Sentry, uptime and domain SEO data at a glance.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/silentdany/accura-watch.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio",
-    "db:seed": "node scripts/seed-sites.mjs"
-  },
-  "prisma": {
-    "seed": "node scripts/seed-sites.mjs"
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.16.1",
@@ -22,7 +24,8 @@
     "lucide-react": "^0.544.0",
     "next": "^15.5.3",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

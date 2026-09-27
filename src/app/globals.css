@@ -1,32 +1,37 @@
 @import "tailwindcss";
 
 /*
-  Accura Console — graphite dark (Design)
-  primary #3DDEA8 = hsl(158 70% 55%)
-  background = hsl(220 10% 7%)
-  radius 0.5rem · dark only
+  Accura Watch — graphite console
+  primary mint #3DDEA8 · background hsl(220 10% 6%)
 */
 :root {
-  --background: 220 10% 7%;
+  color-scheme: dark;
+  --background: 220 12% 5.5%;
   --foreground: 210 20% 96%;
-  --muted: 220 8% 14%;
-  --muted-foreground: 215 10% 55%;
-  --card: 220 9% 10%;
-  --card-foreground: 210 20% 96%;
-  --border: 220 8% 18%;
+  --muted: 220 9% 12%;
+  --muted-foreground: 215 10% 56%;
+  --subtle: 215 8% 38%;
+  --card: 220 10% 8.5%;
+  --card-hover: 220 10% 10.5%;
+  --border: 220 9% 15%;
+  --border-strong: 220 9% 21%;
   --primary: 158 70% 55%;
-  --primary-foreground: 220 10% 7%;
-  --accent: 158 70% 55%;
-  --accent-foreground: 220 10% 7%;
-  --destructive: 0 72% 51%;
+  --primary-foreground: 220 12% 6%;
+  --destructive: 0 72% 60%;
+  --warning: 38 92% 55%;
   --ring: 158 70% 55%;
-  --sidebar: 220 10% 5%;
-  --topbar: 220 10% 8%;
-  --success: 158 70% 45%;
-  --warning: 38 92% 50%;
+  --sidebar: 220 12% 4.5%;
 
-  --radius: 0.5rem;
-  --sidebar-width: 240px;
+  /* Data series (validated dark categorical steps) — one hue per source */
+  --c-gsc: #3987e5;
+  --c-gsc-2: #9085e9;
+  --c-posthog: #d95926;
+  --c-sentry: #d55181;
+  --c-health: #199e70;
+  --c-seo: #c98500;
+
+  --radius: 0.625rem;
+  --sidebar-width: 232px;
 }
 
 @theme inline {
@@ -34,19 +39,23 @@
   --color-foreground: hsl(var(--foreground));
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-subtle: hsl(var(--subtle));
   --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-hover: hsl(var(--card-hover));
   --color-border: hsl(var(--border));
+  --color-border-strong: hsl(var(--border-strong));
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
   --color-destructive: hsl(var(--destructive));
+  --color-warning: hsl(var(--warning));
   --color-ring: hsl(var(--ring));
   --color-sidebar: hsl(var(--sidebar));
-  --color-topbar: hsl(var(--topbar));
-  --color-success: hsl(var(--success));
-  --color-warning: hsl(var(--warning));
+  --color-gsc: var(--c-gsc);
+  --color-gsc-2: var(--c-gsc-2);
+  --color-posthog: var(--c-posthog);
+  --color-sentry: var(--c-sentry);
+  --color-health: var(--c-health);
+  --color-seo: var(--c-seo);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --radius-md: var(--radius);
@@ -64,7 +73,109 @@ body {
   min-height: 100%;
 }
 
+body {
+  background-image: radial-gradient(1200px 500px at 70% -10%, hsl(158 70% 55% / 0.045), transparent 60%);
+  background-attachment: fixed;
+}
+
 ::selection {
   background: hsl(158 70% 55% / 0.35);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Form controls */
+.input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border-strong));
+  background: hsl(var(--muted));
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8125rem;
   color: hsl(var(--foreground));
+  outline: none;
+  transition: border-color 0.15s;
+}
+.input:focus {
+  border-color: hsl(var(--primary));
+}
+.input::placeholder {
+  color: hsl(var(--subtle));
+}
+select.input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, hsl(var(--muted-foreground)) 50%),
+    linear-gradient(135deg, hsl(var(--muted-foreground)) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 55%, calc(100% - 9px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 1.75rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.5rem;
+  padding: 0.42rem 0.8rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.btn-primary {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.btn-primary:hover:not(:disabled) {
+  background: hsl(158 70% 62%);
+}
+.btn-ghost {
+  border: 1px solid hsl(var(--border-strong));
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+}
+.btn-ghost:hover:not(:disabled) {
+  background: hsl(var(--muted));
+}
+.btn-danger {
+  border: 1px solid hsl(var(--destructive) / 0.4);
+  color: hsl(var(--destructive));
+}
+.btn-danger:hover:not(:disabled) {
+  background: hsl(var(--destructive) / 0.1);
+}
+
+.label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.3rem;
+}
+
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: hsl(var(--muted-foreground));
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 0.9s linear infinite;
 }
