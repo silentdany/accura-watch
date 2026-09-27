@@ -100,7 +100,7 @@ export function IntegrationForm({
               <Field label="Location code" hint="2840 = US, 2250 = France, 2826 = UK, 2276 = Germany">
                 <input name="locationCode" type="number" defaultValue={c("locationCode", "2840")} className="input" />
               </Field>
-              <Field label="Language code">
+              <Field label="Language code" hint="Must match the location: fr for France, de for Germany, en for US/UK.">
                 <input name="languageCode" defaultValue={c("languageCode", "en")} className="input" />
               </Field>
               <Field label="Refresh every (days)" hint="Each refresh ≈ $0.02–0.05 per site.">
