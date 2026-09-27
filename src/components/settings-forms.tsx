@@ -103,7 +103,7 @@ export function IntegrationForm({
               <Field label="Language code" hint="Must match the location: fr for France, de for Germany, en for US/UK.">
                 <input name="languageCode" defaultValue={c("languageCode", "en")} className="input" />
               </Field>
-              <Field label="Refresh every (days)" hint="Each refresh ≈ $0.02–0.05 per site.">
+              <Field label="Refresh every (days)" hint="Domain overview. Backlink history & keyword metrics refresh weekly, ranking history & competitors monthly: ≈ $0.10 per site per week in total.">
                 <input name="cadenceDays" type="number" min={1} defaultValue={c("cadenceDays", "7")} className="input" />
               </Field>
               <label className="flex items-center gap-2 self-end pb-2 text-sm">

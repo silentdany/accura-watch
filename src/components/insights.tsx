@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { AuthorityPoint, Correlation, QueryOpportunity, SiteInsights } from "@/lib/insights";
+import { ago } from "@/lib/dates";
 import { fmtNum, fmtPct, fmtPos } from "@/lib/format";
 import { Card, CardHeader, Delta, Empty, Pill } from "./ui";
 import { KpiTile } from "./kpi";
@@ -9,8 +10,7 @@ import { Sparkline } from "./sparkline";
 
 export function InsightTiles({ i }: { i: SiteInsights }) {
   const share = i.searchShare;
-  const est = i.estimateVsReal;
-  const ratio = est && est.real > 0 ? est.estimated / est.real : null;
+  const sov = i.shareOfVoice;
   return (
     <div className="mb-3 grid grid-cols-2 gap-3 xl:grid-cols-4">
       <KpiTile
@@ -34,13 +34,15 @@ export function InsightTiles({ i }: { i: SiteInsights }) {
         hint={i.errorsPer1k ? "Sentry events ÷ PostHog visitors" : "Needs Sentry + PostHog"}
       />
       <KpiTile
-        label="Real vs estimated traffic"
-        color="var(--c-seo)"
-        value={est ? fmtNum(est.real) : "—"}
+        label="Share of voice"
+        color="var(--c-gsc)"
+        value={sov ? fmtPct(sov.value, sov.value < 0.1 ? 1 : 0) : "—"}
         hint={
-          est
-            ? `DataForSEO estimates ${fmtNum(est.estimated)}/mo${ratio ? ` (${ratio >= 1 ? `${ratio.toFixed(1)}× over` : `${(1 / ratio).toFixed(1)}× under`})` : ""}`
-            : "Needs Search Console + DataForSEO"
+          !sov
+            ? "Needs Search Console + DataForSEO keywords"
+            : sov.value > 1
+              ? "Over 100%: several of your pages show per search"
+              : `Your impressions ÷ search volume, ${sov.queries} top queries`
         }
       />
       <KpiTile
@@ -76,7 +78,7 @@ export function CorrelationsCard({ i }: { i: SiteInsights }) {
     <Card>
       <CardHeader
         title="What moves together"
-        hint={`Daily values over the last ${i.correlationWindowDays} days, detrended (vs the previous 7 days) so shared growth doesn't count`}
+        hint={`Daily values over the last ${i.correlationWindowDays} days (links: weekly over a year), detrended so shared growth doesn't count`}
       />
       {i.correlations.length ? (
         <ul className="divide-y divide-border/60">
@@ -86,7 +88,7 @@ export function CorrelationsCard({ i }: { i: SiteInsights }) {
                 <p className={`text-sm ${c.strength === "none" ? "text-muted-foreground" : ""}`}>{c.sentence}</p>
                 <p className="tabular mt-0.5 text-[11px] text-subtle">
                   r = {c.r.toFixed(2)}
-                  {c.lag ? ` · ${c.lag}-day lag` : ""} · {c.days} days
+                  {c.lag ? ` · ${c.lag}-${c.unit} lag` : ""} · {c.days} {c.unit}s
                 </p>
               </div>
               <RBar r={c.r} strength={c.strength} />
@@ -128,10 +130,21 @@ function OppList({ title, hint, rows, render }: { title: string; hint: string; r
   );
 }
 
+const kwMeta = (o: QueryOpportunity) =>
+  [o.volume != null ? `${fmtNum(o.volume)}/mo` : null, o.difficulty != null ? `KD ${o.difficulty}` : null, o.intent].filter(Boolean).join(" · ");
+
 export function OpportunitiesCard({ i }: { i: SiteInsights }) {
   return (
     <Card>
-      <CardHeader title="Search opportunities" dot="var(--c-gsc)" hint="Top queries, last 28 days" />
+      <CardHeader
+        title="Search opportunities"
+        dot="var(--c-gsc)"
+        hint={
+          i.intentMix.length
+            ? `Top queries, last 28 days · clicks by intent: ${i.intentMix.map((x) => `${x.intent} ${fmtPct(x.share, 0)}`).join(", ")}`
+            : "Top queries, last 28 days"
+        }
+      />
       <div className="grid grid-cols-1 gap-2 pb-3 md:grid-cols-2">
         <OppList
           title="Low CTR for their position"
@@ -140,6 +153,7 @@ export function OpportunitiesCard({ i }: { i: SiteInsights }) {
           render={(o) => (
             <>
               pos {fmtPos(o.position)} · CTR {fmtPct(o.ctr)} vs {fmtPct(o.expectedCtr, 0)} typical · <span className="text-foreground">+{fmtNum(o.missedClicks)} clicks</span>
+              {kwMeta(o) ? <span className="block text-subtle">{kwMeta(o)}</span> : null}
             </>
           )}
         />
@@ -150,6 +164,7 @@ export function OpportunitiesCard({ i }: { i: SiteInsights }) {
           render={(o) => (
             <>
               pos {fmtPos(o.position)} · {fmtNum(o.impressions)} impressions · <span className="text-foreground">~+{fmtNum(o.missedClicks)} clicks on page 1</span>
+              {kwMeta(o) ? <span className="block text-subtle">{kwMeta(o)}</span> : null}
             </>
           )}
         />
@@ -265,9 +280,100 @@ export function AuthorityGlance({ i }: { i: SiteInsights }) {
           ) : null}
           {a.referringDomains.length ? <AuthorityRow label="Referring domains" pts={a.referringDomains} format={(v) => fmtNum(v)} /> : null}
           {a.organicKeywords.length ? <AuthorityRow label="Ranking keywords" pts={a.organicKeywords} format={(v) => fmtNum(v)} /> : null}
+          {i.links28d ? (
+            <div className="flex items-center justify-between gap-3 px-4 py-2">
+              <p className="text-[11px] text-muted-foreground">Referring domains, last 28 days</p>
+              <p className="tabular text-sm font-semibold">
+                <span className="text-primary">+{fmtNum(i.links28d.gained)}</span> <span className="text-subtle">/</span>{" "}
+                <span className="text-destructive">−{fmtNum(i.links28d.lost)}</span>
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : (
         <Empty>No authority data yet.</Empty>
+      )}
+    </Card>
+  );
+}
+
+// ─── Competitors & content gaps ─────────────────────────────────────────────
+
+export function CompetitorsCard({ i }: { i: SiteInsights }) {
+  const cal = i.calibration;
+  return (
+    <Card>
+      <CardHeader
+        title="Competitors"
+        dot="var(--c-seo)"
+        hint={
+          cal
+            ? `Traffic calibrated: your real clicks run ${cal.ratio >= 1 ? `${cal.ratio.toFixed(1)}× above` : `${(1 / cal.ratio).toFixed(1)}× below`} DataForSEO's estimate${cal.months ? ` (median of ${cal.months} months)` : ""}`
+            : "Organic competitors by shared keywords"
+        }
+      />
+      {i.competitors.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[380px] text-sm">
+            <thead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+              <tr className="border-b border-border">
+                <th className="px-4 py-2 text-left font-medium">Domain</th>
+                <th className="px-3 py-2 text-right font-medium">Shared kw</th>
+                <th className="px-4 py-2 text-right font-medium">{cal ? "Real traffic (est.)" : "Est. traffic"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {i.competitors.slice(0, 8).map((c) => (
+                <tr key={c.domain} className="border-b border-border/60 last:border-0 hover:bg-card-hover">
+                  <td className="max-w-[200px] truncate px-4 py-2" title={c.domain}>
+                    {c.domain}
+                  </td>
+                  <td className="tabular px-3 py-2 text-right text-muted-foreground">{fmtNum(c.sharedKeywords)}</td>
+                  <td className="tabular px-4 py-2 text-right" title={`DataForSEO estimate: ${fmtNum(c.etv)}/mo`}>
+                    {fmtNum(c.calibratedTraffic ?? c.etv)}
+                    <span className="text-[11px] text-subtle">/mo</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <Empty>No competitor data yet (collected monthly with DataForSEO).</Empty>
+      )}
+    </Card>
+  );
+}
+
+export function ContentGapsCard({ i }: { i: SiteInsights }) {
+  return (
+    <Card>
+      <CardHeader
+        title="Content gaps"
+        dot="var(--c-seo)"
+        hint={`Keywords your top competitors rank for and you don't${i.competitorsUpdatedAt ? ` · updated ${ago(i.competitorsUpdatedAt)}` : ""}`}
+      />
+      {i.contentGaps.length ? (
+        <ul className="divide-y divide-border/60">
+          {i.contentGaps.map((g) => (
+            <li key={g.keyword} className="px-4 py-2 hover:bg-card-hover">
+              <p className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="truncate" title={g.keyword}>
+                  {g.keyword}
+                </span>
+                <span className="tabular shrink-0 text-xs">{g.volume != null ? `${fmtNum(g.volume)}/mo` : "—"}</span>
+              </p>
+              <p className="tabular truncate text-xs text-muted-foreground">
+                {g.competitors > 1 ? `${g.competitors} competitors` : g.competitor}
+                {g.competitorRank ? ` · best rank ${g.competitorRank}` : ""}
+                {g.difficulty != null ? ` · KD ${g.difficulty}` : ""}
+                {g.intent ? ` · ${g.intent}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Empty>No gaps yet (collected monthly with DataForSEO).</Empty>
       )}
     </Card>
   );
