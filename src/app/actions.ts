@@ -130,7 +130,7 @@ export async function saveIntegrationAction(_: ActionState, fd: FormData): Promi
         await saveIntegration("posthog", { host: field(fd, "host") || "https://us.posthog.com" }, { apiKey: field(fd, "apiKey") });
         return "PostHog saved";
       case "sentry":
-        await saveIntegration("sentry", { org: field(fd, "org"), host: field(fd, "host") || "https://sentry.io" }, { token: field(fd, "token") });
+        await saveIntegration("sentry", { org: field(fd, "org") || null, host: field(fd, "host") || "https://sentry.io" }, { token: field(fd, "token") });
         return "Sentry saved";
       case "dataforseo":
         await saveIntegration(
@@ -144,6 +144,9 @@ export async function saveIntegrationAction(_: ActionState, fd: FormData): Promi
           { login: field(fd, "login"), password: field(fd, "password") },
         );
         return "DataForSEO saved";
+      case "ahrefs":
+        await saveIntegration("ahrefs", {}, { apiKey: field(fd, "apiKey") });
+        return "Ahrefs saved";
       case "openpagerank":
         await saveIntegration("openpagerank", {}, { apiKey: field(fd, "apiKey") });
         return "Open PageRank saved";

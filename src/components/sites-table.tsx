@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Pin } from "lucide-react";
 import type { SiteRow } from "@/lib/metrics";
-import { fmtMs, fmtNum, fmtPct, fmtPos, pctChange } from "@/lib/format";
+import { authority, fmtMs, fmtNum, fmtPct, fmtPos, pctChange } from "@/lib/format";
 import { Delta, Favicon, StatusDot } from "./ui";
 import { Sparkline } from "./sparkline";
 
@@ -31,7 +31,7 @@ const val = (r: SiteRow, k: SortKey): number | string => {
     case "errors":
       return r.sentry?.unresolved ?? -1;
     case "authority":
-      return r.seo?.rank ?? r.seo?.opr ?? -1;
+      return authority(r.seo)?.value ?? -1;
   }
 };
 
@@ -230,8 +230,8 @@ export function SitesTable({ rows, range }: { rows: SiteRow[]; range: number }) 
                 {r.seo ? (
                   <div className="flex flex-col items-end">
                     <span className="tabular font-semibold">
-                      {r.seo.rank != null ? Math.round(r.seo.rank) : r.seo.opr != null ? r.seo.opr.toFixed(1) : "—"}
-                      <span className="ml-1 text-[10px] font-normal text-subtle">{r.seo.rank != null ? "DR" : r.seo.opr != null ? "OPR" : ""}</span>
+                      {authority(r.seo)?.text ?? "—"}
+                      <span className="ml-1 text-[10px] font-normal text-subtle">{authority(r.seo)?.label ?? ""}</span>
                     </span>
                     <span className="tabular text-[11px] text-muted-foreground">
                       {r.seo.referringDomains != null ? `${fmtNum(r.seo.referringDomains)} RD` : ""}

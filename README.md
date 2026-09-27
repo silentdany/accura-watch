@@ -3,7 +3,7 @@
 **Open-source, MCP-native dashboard for all your sites.** See at a glance, for every site you run:
 
 - **Google Search Console** (priority): clicks, impressions, CTR, average position with period-over-period deltas, top queries and pages, winners and losers
-- **Domain SEO without an Ahrefs plan**: domain rank, backlinks, referring domains, organic keywords and estimated traffic via [DataForSEO](https://dataforseo.com) (pay-as-you-go, the same backend [OpenSEO](https://github.com/every-app/open-seo) uses), plus a free [Open PageRank](https://www.domcop.com/openpagerank/) score
+- **Domain SEO without an Ahrefs plan**: domain rank, backlinks, referring domains, organic keywords and estimated traffic via [DataForSEO](https://dataforseo.com) (pay-as-you-go, the same backend [OpenSEO](https://github.com/every-app/open-seo) uses), plus the free Ahrefs Domain Rating endpoint and a free [Open PageRank](https://www.domcop.com/openpagerank/) score
 - **Analytics** from **PostHog**: visitors, pageviews, top pages and referrers
 - **Health**: uptime, latency, TLS certificate expiry
 - **Sentry**: unresolved issues, error events per day and top issues
@@ -37,6 +37,17 @@ Open http://localhost:3000 and create the owner account. The first sign-up becom
 3. **Settings**: add PostHog (personal API key), Sentry (auth token + org), DataForSEO and/or Open PageRank. Click **Auto-match projects** on the Sites page.
 4. **Settings → MCP & API**: create a token and connect your agent.
 
+### Upgrading from v0.1 (`Site.config` + `MetricSnapshot`)
+
+The schema changed. To keep your existing sites and their Sentry/GSC mappings, run this before `db push`:
+
+```bash
+psql "$DATABASE_URL" -f scripts/migrate-from-v1.sql
+npx prisma db push --accept-data-loss   # drops Site.config and the old MetricSnapshot table
+```
+
+Users and sessions are untouched. History is backfilled on the first sync (16 months of GSC data).
+
 ### Deploy on Vercel
 
 1. Import the repo and set the env vars from `.env.example`.
@@ -63,9 +74,10 @@ Open http://localhost:3000 and create the owner account. The first sign-up becom
 |---|---|---|
 | Google Search Console | OAuth (recommended) or service account | OAuth sees every property on your account. With a service account, add its email as a user on each property. |
 | PostHog | Personal API key (`project:read`, `query:read`) + US/EU host | Uses HogQL. If one project tracks several sites, set the site's `$host` filter. |
-| Sentry | Auth token (`org:read`, `project:read`, `event:read`) + org slug | `https://de.sentry.io` for EU, or your self-hosted URL. |
+| Sentry | Auth token (`org:read`, `project:read`, `event:read`) + optional org slug | Without an org slug, the token's first organization is used. `https://de.sentry.io` for EU, or your self-hosted URL. |
 | DataForSEO | API login and password | Labs domain overview + Backlinks summary cost about $0.02–0.05 per site per refresh. The location/language codes set the market for keyword data. |
 | Open PageRank | Free API key | 0–10 authority score. |
+| Ahrefs (free) | Free APIv3 key | Domain Rating via `/v3/public/domain-rating-free` (no API units). Shown as **DR**, preferred over other authority scores. |
 
 Credentials entered in Settings are stored **AES-256-GCM encrypted** (key derived from `ENCRYPTION_KEY` or `BETTER_AUTH_SECRET`). Every provider can also be configured through env vars (see `.env.example`); values from Settings take precedence.
 

@@ -115,9 +115,17 @@ function SeoCard({ r }: { r: SiteReport }) {
     organic?: { keywords: number; etv: number; top3: number; top10: number; trafficCost: number } | null;
     backlinks?: { rank: number; backlinks: number; referringDomains: number; referringMainDomains: number; spamScore: number | null; brokenBacklinks: number | null } | null;
     openPageRank?: { score: number; globalRank: number | null } | null;
+    ahrefs?: { domainRating: number } | null;
     errors?: string[];
   } | null;
   const items: { label: string; value: string; delta?: React.ReactNode }[] = [];
+  if (detail?.ahrefs) {
+    items.push({
+      label: "Ahrefs DR",
+      value: String(Math.round(detail.ahrefs.domainRating)),
+      delta: <Delta cur={r.seo?.ahrefsDr} prev={r.seo?.ahrefsDrPrev} mode="abs" />,
+    });
+  }
   if (detail?.backlinks) {
     items.push(
       { label: "Domain rank", value: String(Math.round(detail.backlinks.rank)), delta: <Delta cur={r.seo?.rank} prev={r.seo?.rankPrev} mode="abs" /> },
@@ -143,7 +151,7 @@ function SeoCard({ r }: { r: SiteReport }) {
       <CardHeader
         title="Domain authority"
         dot="var(--c-seo)"
-        hint={r.seo?.collectedAt ? `DataForSEO / Open PageRank · updated ${ago(r.seo.collectedAt)}` : "DataForSEO / Open PageRank"}
+        hint={`${detail?.ahrefs ? "Domain Rating by Ahrefs · " : ""}DataForSEO / Open PageRank${r.seo?.collectedAt ? ` · updated ${ago(r.seo.collectedAt)}` : ""}`}
       />
       {items.length ? (
         <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
@@ -164,7 +172,7 @@ function SeoCard({ r }: { r: SiteReport }) {
         <Empty>
           No SEO data yet.{" "}
           <Link href="/settings#dataforseo" className="text-primary hover:underline">
-            Connect DataForSEO or Open PageRank
+            Connect DataForSEO, Open PageRank or Ahrefs
           </Link>
         </Empty>
       )}

@@ -59,6 +59,8 @@ export type SeoSummary = {
   organicEtv: number | null;
   organicTop10: number | null;
   opr: number | null;
+  ahrefsDr: number | null;
+  ahrefsDrPrev: number | null;
   collectedAt: string | null;
 };
 
@@ -274,6 +276,8 @@ function buildRows({ sites, range, metrics, insights, checks, states }: BuildInp
         organicEtv: latestTwo(get(site.id, "seo", "organic_etv"))[0],
         organicTop10: latestTwo(get(site.id, "seo", "organic_top10"))[0],
         opr: latestTwo(get(site.id, "seo", "opr"))[0],
+        ahrefsDr: latestTwo(get(site.id, "seo", "ahrefs_dr"))[0],
+        ahrefsDrPrev: latestTwo(get(site.id, "seo", "ahrefs_dr"))[1],
         collectedAt: seoSummary.collectedAt ?? null,
       };
     }

@@ -20,6 +20,7 @@ const DOT: Record<string, string> = {
   sentry: "var(--c-sentry)",
   dataforseo: "var(--c-seo)",
   openpagerank: "var(--c-seo)",
+  ahrefs: "var(--c-seo)",
 };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { errorMessage, mapLimit } from "@/lib/http";
 import {
+  getAhrefsCreds,
   getDataForSeoCreds,
   getGoogleCreds,
   getOpenPageRankCreds,
@@ -28,12 +29,13 @@ export type CollectTaskResult = {
 };
 
 export async function connectedProviders(): Promise<Connected> {
-  const [google, posthog, sentry, dfs, opr] = await Promise.all([
+  const [google, posthog, sentry, dfs, opr, ahrefs] = await Promise.all([
     getGoogleCreds(),
     getPosthogCreds(),
     getSentryCreds(),
     getDataForSeoCreds(),
     getOpenPageRankCreds(),
+    getAhrefsCreds(),
   ]);
   return {
     google: !!google,
@@ -41,6 +43,7 @@ export async function connectedProviders(): Promise<Connected> {
     sentry: !!sentry,
     dataforseo: !!dfs,
     openpagerank: !!opr,
+    ahrefs: !!ahrefs,
     seoCadenceDays: dfs?.cadenceDays ?? 7,
   };
 }

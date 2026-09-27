@@ -1,5 +1,6 @@
 import { fetchJson } from "@/lib/http";
 import {
+  getAhrefsCreds,
   getDataForSeoCreds,
   getOpenPageRankCreds,
   type DataForSeoCreds,
@@ -10,6 +11,7 @@ import {
  * - DataForSEO (pay-as-you-go, ~$0.01–0.03 per call): Labs domain overview + Backlinks summary.
  *   This is the same data backend OpenSEO uses.
  * - Open PageRank (free): 0–10 authority score.
+ * - Ahrefs free Domain Rating endpoint (free APIv3 key, no API units).
  */
 
 type DfsEnvelope<T> = {
@@ -57,6 +59,7 @@ export type DomainSeo = {
     brokenBacklinks: number | null;
   } | null;
   openPageRank: { score: number; globalRank: number | null } | null;
+  ahrefs: { domainRating: number } | null;
   cost: number;
   errors: string[];
 };
@@ -128,16 +131,23 @@ async function openPageRank(apiKey: string, domain: string) {
   return { score: Number(r.page_rank_decimal ?? 0), globalRank: Number.isFinite(rank) ? rank : null };
 }
 
-export async function seoProvidersConfigured(): Promise<{ dataforseo: boolean; openpagerank: boolean }> {
-  const [a, b] = await Promise.all([getDataForSeoCreds(), getOpenPageRankCreds()]);
-  return { dataforseo: !!a, openpagerank: !!b };
+async function ahrefsDomainRating(apiKey: string, domain: string) {
+  const u = new URL("https://api.ahrefs.com/v3/public/domain-rating-free");
+  u.searchParams.set("target", domain);
+  u.searchParams.set("output", "json");
+  const { data } = await fetchJson<{ domain_rating?: { domain_rating?: number } | number }>(u, {
+    headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+    label: "Ahrefs",
+  });
+  const dr = typeof data.domain_rating === "number" ? data.domain_rating : data.domain_rating?.domain_rating;
+  return typeof dr === "number" && Number.isFinite(dr) ? { domainRating: dr } : null;
 }
 
 export async function fetchDomainSeo(domain: string): Promise<DomainSeo> {
-  const [dfsCreds, opr] = await Promise.all([getDataForSeoCreds(), getOpenPageRankCreds()]);
-  if (!dfsCreds && !opr) throw new Error("No SEO data provider connected (DataForSEO or Open PageRank)");
+  const [dfsCreds, opr, ahrefs] = await Promise.all([getDataForSeoCreds(), getOpenPageRankCreds(), getAhrefsCreds()]);
+  if (!dfsCreds && !opr && !ahrefs) throw new Error("No SEO data provider connected (DataForSEO, Open PageRank or Ahrefs)");
 
-  const out: DomainSeo = { domain, organic: null, backlinks: null, openPageRank: null, cost: 0, errors: [] };
+  const out: DomainSeo = { domain, organic: null, backlinks: null, openPageRank: null, ahrefs: null, cost: 0, errors: [] };
   const jobs: Promise<void>[] = [];
   if (dfsCreds) {
     jobs.push(
@@ -163,6 +173,13 @@ export async function fetchDomainSeo(domain: string): Promise<DomainSeo> {
     jobs.push(
       openPageRank(opr.apiKey, domain)
         .then((r) => void (out.openPageRank = r))
+        .catch((e) => void out.errors.push(String(e instanceof Error ? e.message : e))),
+    );
+  }
+  if (ahrefs) {
+    jobs.push(
+      ahrefsDomainRating(ahrefs.apiKey, domain)
+        .then((r) => void (out.ahrefs = r))
         .catch((e) => void out.errors.push(String(e instanceof Error ? e.message : e))),
     );
   }

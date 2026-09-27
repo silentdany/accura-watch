@@ -24,8 +24,9 @@ export type DataForSeoCreds = {
   cadenceDays: number;
 };
 export type OpenPageRankCreds = { apiKey: string };
+export type AhrefsCreds = { apiKey: string };
 
-export type ProviderId = "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank";
+export type ProviderId = "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank" | "ahrefs";
 
 export const PROVIDERS: { id: ProviderId; label: string; feeds: string }[] = [
   { id: "google", label: "Google Search Console", feeds: "Clicks, impressions, CTR, position, top queries & pages" },
@@ -33,6 +34,7 @@ export const PROVIDERS: { id: ProviderId; label: string; feeds: string }[] = [
   { id: "sentry", label: "Sentry", feeds: "Unresolved issues, error events per day" },
   { id: "dataforseo", label: "DataForSEO", feeds: "Domain rank, backlinks, referring domains, organic keywords & traffic" },
   { id: "openpagerank", label: "Open PageRank", feeds: "Free domain authority score (0–10)" },
+  { id: "ahrefs", label: "Ahrefs (free)", feeds: "Free Domain Rating (0–100) — no paid plan needed" },
 ];
 
 type Row = { config: Record<string, unknown>; secret: Record<string, unknown> };
@@ -74,10 +76,32 @@ export async function getPosthogCreds(): Promise<PosthogCreds | null> {
 export async function getSentryCreds(): Promise<SentryCreds | null> {
   const row = await readRow("sentry");
   const token = str(row?.secret.token) ?? env("SENTRY_AUTH_TOKEN");
-  const org = str(row?.config.org) ?? env("SENTRY_ORG");
-  if (!token || !org) return null;
+  if (!token) return null;
   const host = (str(row?.config.host) ?? env("SENTRY_HOST") ?? "https://sentry.io").replace(/\/+$/, "");
+  const org = str(row?.config.org) ?? env("SENTRY_ORG") ?? (await discoverSentryOrg(token, host));
+  if (!org) return null;
   return { token, org, host };
+}
+
+const sentryOrgCache = new Map<string, string | null>();
+
+/** No org configured → use the token's first organization. */
+async function discoverSentryOrg(token: string, host: string): Promise<string | null> {
+  const key = `${host}|${token.slice(-8)}`;
+  if (sentryOrgCache.has(key)) return sentryOrgCache.get(key)!;
+  let slug: string | null = null;
+  try {
+    const res = await fetch(`${host}/api/0/organizations/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    });
+    if (res.ok) slug = ((await res.json()) as { slug: string }[])[0]?.slug ?? null;
+  } catch {
+    /* leave null */
+  }
+  sentryOrgCache.set(key, slug);
+  return slug;
 }
 
 export async function getDataForSeoCreds(): Promise<DataForSeoCreds | null> {
@@ -94,6 +118,12 @@ export async function getDataForSeoCreds(): Promise<DataForSeoCreds | null> {
     backlinks: c.backlinks === undefined ? true : Boolean(c.backlinks),
     cadenceDays: Math.max(1, Number(c.cadenceDays ?? 7) || 7),
   };
+}
+
+export async function getAhrefsCreds(): Promise<AhrefsCreds | null> {
+  const row = await readRow("ahrefs");
+  const apiKey = str(row?.secret.apiKey) ?? env("AHREFS_API_KEY");
+  return apiKey ? { apiKey } : null;
 }
 
 export async function getOpenPageRankCreds(): Promise<OpenPageRankCreds | null> {
@@ -149,12 +179,13 @@ export type IntegrationStatus = {
 export async function integrationStatuses(): Promise<IntegrationStatus[]> {
   const rows = await prisma.integration.findMany();
   const byId = new Map(rows.map((r) => [r.provider, r]));
-  const [google, posthog, sentry, dfs, opr] = await Promise.all([
+  const [google, posthog, sentry, dfs, opr, ahrefs] = await Promise.all([
     getGoogleCreds(),
     getPosthogCreds(),
     getSentryCreds(),
     getDataForSeoCreds(),
     getOpenPageRankCreds(),
+    getAhrefsCreds(),
   ]);
   const detail: Record<ProviderId, string | null> = {
     google: google
@@ -168,6 +199,7 @@ export async function integrationStatuses(): Promise<IntegrationStatus[]> {
       ? `${dfs.login} · loc ${dfs.locationCode}/${dfs.languageCode} · every ${dfs.cadenceDays}d${dfs.backlinks ? " · backlinks" : ""}`
       : null,
     openpagerank: opr ? "API key set" : null,
+    ahrefs: ahrefs ? "API key set · Domain Rating by Ahrefs" : null,
   };
   const connected: Record<ProviderId, boolean> = {
     google: !!google,
@@ -175,6 +207,7 @@ export async function integrationStatuses(): Promise<IntegrationStatus[]> {
     sentry: !!sentry,
     dataforseo: !!dfs,
     openpagerank: !!opr,
+    ahrefs: !!ahrefs,
   };
   return PROVIDERS.map((p) => {
     const row = byId.get(p.id);

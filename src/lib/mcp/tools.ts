@@ -220,7 +220,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_domain_seo",
     title: "Domain SEO metrics",
     description:
-      "Live Ahrefs-style metrics for ANY domain (competitors too) via DataForSEO + Open PageRank: domain rank (0-100), backlinks, referring domains, organic keywords, estimated organic traffic. Costs a few cents of DataForSEO credit per call.",
+      "Live Ahrefs-style metrics for ANY domain (competitors too) via DataForSEO, Open PageRank and the free Ahrefs Domain Rating: domain rank (0-100), backlinks, referring domains, organic keywords, estimated organic traffic. Costs a few cents of DataForSEO credit per call.",
     input: z.object({ domain: z.string() }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     async handler({ domain }) {
@@ -302,7 +302,7 @@ export const TOOLS: ToolDef[] = [
   tool({
     name: "get_integrations",
     title: "Integration status",
-    description: "Which data providers are connected (Google Search Console, PostHog, Sentry, DataForSEO, Open PageRank). Secrets are never returned.",
+    description: "Which data providers are connected (Google Search Console, PostHog, Sentry, DataForSEO, Open PageRank, Ahrefs). Secrets are never returned.",
     input: z.object({}),
     annotations: { readOnlyHint: true },
     async handler() {

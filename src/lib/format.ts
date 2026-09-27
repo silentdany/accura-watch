@@ -32,3 +32,14 @@ export function pctChange(cur: number, prev: number): number | null {
   if (!prev) return cur ? null : 0;
   return (cur - prev) / prev;
 }
+
+/** Best available authority score: Ahrefs DR > DataForSEO rank (both /100) > Open PageRank (/10). */
+export function authority(
+  seo: { ahrefsDr: number | null; rank: number | null; opr: number | null } | null | undefined,
+): { value: number; label: "DR" | "Rank" | "OPR"; text: string } | null {
+  if (!seo) return null;
+  if (seo.ahrefsDr != null) return { value: seo.ahrefsDr, label: "DR", text: String(Math.round(seo.ahrefsDr)) };
+  if (seo.rank != null) return { value: seo.rank, label: "Rank", text: String(Math.round(seo.rank)) };
+  if (seo.opr != null) return { value: seo.opr * 10, label: "OPR", text: seo.opr.toFixed(1) };
+  return null;
+}

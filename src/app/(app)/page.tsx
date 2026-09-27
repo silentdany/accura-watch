@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowRight, Bot, CircleAlert, Info, Search } from "lucid
 import { loadOverview, type Alert } from "@/lib/metrics";
 import { integrationStatuses } from "@/lib/integrations";
 import { ago, parseRange } from "@/lib/dates";
-import { fmtNum, fmtPct, fmtPos } from "@/lib/format";
+import { authority, fmtNum, fmtPct, fmtPos } from "@/lib/format";
 import { Card, CardHeader, Delta, PageHeader } from "@/components/ui";
 import { KpiTile } from "@/components/kpi";
 import { RangeTabs } from "@/components/range-tabs";
@@ -115,10 +115,11 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const withSeo = o.sites.filter((s) => s.seo?.rank != null);
-  const avgRank = withSeo.length ? withSeo.reduce((a, s) => a + (s.seo!.rank ?? 0), 0) / withSeo.length : null;
-  const withOpr = o.sites.filter((s) => s.seo?.opr != null);
-  const avgOpr = withOpr.length ? withOpr.reduce((a, s) => a + (s.seo!.opr ?? 0), 0) / withOpr.length : null;
+  // Average only comparable scores: the most common authority label across sites.
+  const auth = o.sites.map((s) => authority(s.seo)).filter((a) => a !== null);
+  const authLabel = (["DR", "Rank", "OPR"] as const).find((l) => auth.some((a) => a.label === l)) ?? null;
+  const authVals = auth.filter((a) => a.label === authLabel).map((a) => (a.label === "OPR" ? a.value / 10 : a.value));
+  const avgAuth = authVals.length ? authVals.reduce((x, y) => x + y, 0) / authVals.length : null;
   const gscCount = o.sites.filter((s) => s.gsc).length;
   const phCount = o.sites.filter((s) => s.posthog).length;
   const sentryCount = o.sites.filter((s) => s.sentry).length;
@@ -190,8 +191,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         <KpiTile
           label="Avg authority"
           color="var(--c-seo)"
-          value={avgRank != null ? Math.round(avgRank) : avgOpr != null ? avgOpr.toFixed(1) : "—"}
-          hint={avgRank != null ? "DataForSEO rank /100" : avgOpr != null ? "Open PageRank /10" : "No SEO provider"}
+          value={avgAuth == null ? "—" : authLabel === "OPR" ? avgAuth.toFixed(1) : Math.round(avgAuth)}
+          hint={
+            authLabel === "DR" ? "Ahrefs Domain Rating /100" : authLabel === "Rank" ? "DataForSEO rank /100" : authLabel === "OPR" ? "Open PageRank /10" : "No SEO provider"
+          }
         />
         <Link
           href="/settings#mcp"

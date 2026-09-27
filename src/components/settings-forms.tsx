@@ -42,7 +42,7 @@ export function IntegrationForm({
   connected,
   config,
 }: {
-  provider: "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank";
+  provider: "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank" | "ahrefs";
   connected: boolean;
   config: Record<string, unknown>;
 }) {
@@ -80,8 +80,8 @@ export function IntegrationForm({
               <Field label="Auth token" hint="Sentry → Settings → Auth Tokens (org:read, project:read, event:read).">
                 <input name="token" type="password" placeholder={keep(connected) || "sntrys_..."} required={!connected} className="input" autoComplete="off" />
               </Field>
-              <Field label="Organization slug">
-                <input name="org" defaultValue={c("org")} required placeholder="my-org" className="input" />
+              <Field label="Organization slug" hint="Leave empty to use the token's first organization.">
+                <input name="org" defaultValue={c("org")} placeholder="my-org" className="input" />
               </Field>
               <Field label="Host" hint="https://de.sentry.io for EU data residency, or your self-hosted URL.">
                 <input name="host" defaultValue={c("host", "https://sentry.io")} className="input" />
@@ -110,6 +110,13 @@ export function IntegrationForm({
                 Include Backlinks API (rank, referring domains)
               </label>
             </>
+          ) : null}
+          {provider === "ahrefs" ? (
+            <div className="sm:col-span-2">
+              <Field label="Free API key" hint="Ahrefs free APIv3 key — Domain Rating via /v3/public/domain-rating-free, no API units used.">
+                <input name="apiKey" type="password" placeholder={keep(connected)} required={!connected} className="input" autoComplete="off" />
+              </Field>
+            </div>
           ) : null}
           {provider === "openpagerank" ? (
             <div className="sm:col-span-2">

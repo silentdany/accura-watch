@@ -17,6 +17,7 @@ export type Connected = {
   sentry: boolean;
   dataforseo: boolean;
   openpagerank: boolean;
+  ahrefs: boolean;
   seoCadenceDays: number;
 };
 
@@ -206,10 +207,10 @@ const seo: Collector = {
   source: "seo",
   label: "Domain SEO",
   cadenceMinutes: (c) => (c.dataforseo ? c.seoCadenceDays * 1440 - 60 : 1440 - 60),
-  skipReason: (_site, c) => (!c.dataforseo && !c.openpagerank ? "No SEO provider connected" : null),
+  skipReason: (_site, c) => (!c.dataforseo && !c.openpagerank && !c.ahrefs ? "No SEO provider connected" : null),
   async run(site) {
     const data = await fetchDomainSeo(site.domain);
-    if (!data.organic && !data.backlinks && !data.openPageRank) {
+    if (!data.organic && !data.backlinks && !data.openPageRank && !data.ahrefs) {
       throw new Error(data.errors.join(" · ") || "No SEO data returned");
     }
     const date = ymd(utcDay());
@@ -224,6 +225,7 @@ const seo: Collector = {
     put("backlinks", data.backlinks?.backlinks);
     put("referring_domains", data.backlinks?.referringDomains);
     put("opr", data.openPageRank?.score);
+    put("ahrefs_dr", data.ahrefs?.domainRating);
     await writeDaily(site.id, "seo", pts);
     await writeInsight(site.id, "seo", "summary", { ...data, collectedAt: new Date().toISOString() });
     if (data.errors.length) return `partial: ${data.errors.join(" · ")}`;
