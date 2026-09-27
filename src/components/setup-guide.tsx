@@ -12,7 +12,7 @@ function A({ href, children }: { href: string; children: React.ReactNode }) {
 }
 
 function C({ children }: { children: React.ReactNode }) {
-  return <code className="text-foreground">{children}</code>;
+  return <code className="break-all text-foreground">{children}</code>;
 }
 
 function guides(redirectUri: string): Record<Provider, Guide[]> {

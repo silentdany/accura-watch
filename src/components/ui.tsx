@@ -14,7 +14,7 @@ export function Card({
   id?: string;
 }) {
   return (
-    <section id={id} className={`rounded-[var(--radius-md)] border border-border bg-card ${className}`}>
+    <section id={id} className={`min-w-0 rounded-[var(--radius-md)] border border-border bg-card ${className}`}>
       {children}
     </section>
   );

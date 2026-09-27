@@ -52,7 +52,7 @@ export function IntegrationForm({
       {(pending, state) => (
         <>
           <input type="hidden" name="provider" value={provider} />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {provider === "google" ? (
             <div className="sm:col-span-2">
               <Field

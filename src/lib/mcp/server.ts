@@ -11,7 +11,7 @@ const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 export const SERVER_INFO = { name: "accura-watch", title: "Accura Watch", version: "0.2.0" };
 
 const INSTRUCTIONS = `Accura Watch monitors a portfolio of websites: Google Search Console (priority), PostHog analytics, Sentry errors, uptime/TLS and domain SEO (DataForSEO / Open PageRank).
-Start with get_overview (or get_alerts) for the big picture, then get_site_report for one site.
+Start with get_overview (or get_alerts) for the big picture, then get_site_report for one site and get_site_insights for cross-source stats (search share, errors per visitor, correlations, CTR gaps).
 For ad-hoc questions use the live tools: query_search_console, run_hogql, list_sentry_issues, get_domain_seo, check_site_health.
 Sites are referenced by slug or domain. Stored metrics are refreshed by a cron; call sync_now if data looks stale.`;
 
@@ -31,7 +31,7 @@ const PROMPTS = [
     title: "SEO deep dive",
     description: "Analyze one site's Search Console performance and find quick wins.",
     arguments: [{ name: "site", description: "Site slug or domain", required: true }],
-    text: "For site {{site}}: call get_site_report (range 28), then query_search_console for queries ranking in positions 5–20 with high impressions (dimensions query,page; row_limit 500). Identify quick wins (striking-distance keywords, low-CTR pages with good position, cannibalization) and declining pages vs previous period. Finish with get_domain_seo for authority context. Output a prioritized action list.",
+    text: "For site {{site}}: call get_site_report (range 28) and get_site_insights (CTR gaps, striking distance, per-page search share), then query_search_console for queries ranking in positions 5–20 with high impressions (dimensions query,page; row_limit 500). Identify quick wins (striking-distance keywords, low-CTR pages with good position, cannibalization) and declining pages vs previous period. Finish with get_domain_seo for authority context. Output a prioritized action list.",
   },
   {
     name: "incident_triage",

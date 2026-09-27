@@ -93,7 +93,7 @@ export function SiteEditor({ site, catalogs }: { site: EditableSite; catalogs: C
           </form>
         </div>
       </div>
-      <ActionForm action={updateSiteAction} className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+      <ActionForm action={updateSiteAction} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
         {(pending, state) => (
           <>
             <input type="hidden" name="id" value={site.id} />
@@ -147,7 +147,7 @@ export function AddSiteForm() {
     <ActionForm action={addSiteAction} resetOnSuccess className="flex flex-col gap-3 p-4">
       {(pending, state) => (
         <>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="label">Domain or URL</span>
               <input name="domain" required placeholder="example.com" className="input" />
