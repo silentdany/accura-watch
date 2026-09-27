@@ -1,4 +1,4 @@
-// Accura Watch V1 - Better Auth + Site + MetricSnapshot
+// Accura Watch — open-source, MCP-native multi-site dashboard
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,7 +8,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Better Auth (standard Prisma schema)
+// ─── Better Auth (standard schema) ──────────────────────────────────────────
 
 model User {
   id            String    @id
@@ -73,36 +73,106 @@ model Verification {
   @@map("verification")
 }
 
-// Accura Watch domain
+// ─── Sites & data ───────────────────────────────────────────────────────────
 
+/// A watched site. Created from the UI, the MCP server or a Search Console import.
 model Site {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  url       String
-  active    Boolean  @default(true)
-  /// Per-site connector config, e.g. { "sentryProject": "brieform" }
-  config    Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  slug             String   @unique
+  /// Bare hostname without www (e.g. example.com). Used for SEO + health.
+  domain           String   @unique
+  url              String
+  /// Search Console property, e.g. "sc-domain:example.com" or "https://example.com/"
+  gscProperty      String?
+  /// PostHog project id (numeric, stored as string)
+  posthogProjectId String?
+  /// Optional $host filter when a PostHog project tracks several sites
+  posthogHost      String?
+  /// Sentry project slug inside the configured org
+  sentryProject    String?
+  pinned           Boolean  @default(false)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  snapshots MetricSnapshot[]
+  metrics      DailyMetric[]
+  insights     Insight[]
+  healthChecks HealthCheck[]
+  syncStates   SyncState[]
 
   @@index([active])
 }
 
-/// Point-in-time metrics for a site (health, Sentry, PostHog, GSC, Ahrefs, ...)
-model MetricSnapshot {
-  id          String   @id @default(cuid())
-  siteId      String
-  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  source      String // health | sentry | posthog | gsc | ahrefs
-  key         String // e.g. status, error_rate, sessions, clicks, domain_rating
-  value       Float?
-  valueText   String?
-  meta        Json?
-  collectedAt DateTime @default(now())
+/// One value per site/source/key/day (GSC clicks, PostHog visitors, Sentry events, SEO rank...)
+model DailyMetric {
+  id     String   @id @default(cuid())
+  siteId String
+  site   Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  source String
+  key    String
+  date   DateTime @db.Date
+  value  Float
 
-  @@index([siteId, source, collectedAt])
-  @@index([source, key, collectedAt])
+  @@unique([siteId, source, key, date])
+  @@index([date])
+}
+
+/// Latest structured payload per site/source/kind (top queries, top issues, period summaries...)
+model Insight {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  source    String
+  kind      String
+  data      Json
+  updatedAt DateTime @updatedAt
+
+  @@unique([siteId, source, kind])
+}
+
+model HealthCheck {
+  id           String    @id @default(cuid())
+  siteId       String
+  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  checkedAt    DateTime  @default(now())
+  ok           Boolean
+  statusCode   Int?
+  latencyMs    Int?
+  sslExpiresAt DateTime?
+  error        String?
+
+  @@index([siteId, checkedAt])
+}
+
+/// Last run of each collector for each site (drives cadence + error display)
+model SyncState {
+  id            String    @id @default(cuid())
+  siteId        String
+  site          Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  source        String
+  lastRunAt     DateTime
+  lastSuccessAt DateTime?
+  ok            Boolean
+  error         String?
+
+  @@unique([siteId, source])
+}
+
+/// Credentials for a data provider. `secret` is AES-256-GCM encrypted JSON.
+model Integration {
+  provider  String   @id
+  config    Json?
+  secret    String?
+  updatedAt DateTime @updatedAt
+}
+
+/// Personal access tokens for the MCP server and REST API (sha256-hashed)
+model ApiToken {
+  id         String    @id @default(cuid())
+  name       String
+  prefix     String
+  tokenHash  String    @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
 }

@@ -1,0 +1,13 @@
+# Optional: hourly collection for hosts without cron (e.g. Vercel Hobby only allows daily crons).
+# Set repository secrets WATCH_URL (https://your-instance) and CRON_SECRET, then enable this workflow.
+name: Collect
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+jobs:
+  collect:
+    if: ${{ vars.ENABLE_COLLECT_WORKFLOW == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -m 290 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.WATCH_URL }}/api/cron/collect" > /dev/null

@@ -49,7 +49,7 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
         const { error: err } = await authClient.signUp.email({
           email,
           password,
-          name: "Danny",
+          name: email.split("@")[0],
           callbackURL: "/",
         });
         if (err) {
@@ -76,7 +76,7 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
           <h1 className="text-lg font-semibold tracking-tight">Accura Watch</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Solo owner login — email + password (Better Auth).
+          Single-owner instance — email + password.
         </p>
         <form className="mt-6 space-y-3" onSubmit={onSubmit}>
           <label className="block text-xs text-muted-foreground">
@@ -87,7 +87,7 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="dany@accura.dev"
+              placeholder="you@example.com"
               className="mt-1 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
             />
           </label>
