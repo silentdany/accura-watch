@@ -7,6 +7,7 @@ import { listSentryIssues, sentryDailyEvents } from "@/lib/providers/sentry";
 import { fetchDomainSeo } from "@/lib/providers/seo";
 import { checkHealth } from "@/lib/providers/health";
 import { writeDaily, writeInsight, type Point } from "./store";
+import { errorMessage } from "@/lib/http";
 
 export type Source = "health" | "gsc" | "posthog" | "sentry" | "seo";
 export const SOURCES: Source[] = ["health", "gsc", "posthog", "sentry", "seo"];
@@ -191,13 +192,18 @@ const sentry: Collector = {
   skipReason: (site, c) => (!c.sentry ? "Sentry not connected" : !site.sentryProject ? "No Sentry project" : null),
   async run(site, { firstRun }) {
     const project = site.sentryProject!;
-    const [issues, events] = await Promise.all([
+    // Issues and event stats use different endpoints/scopes: keep whichever succeeds.
+    const [issues, events] = await Promise.allSettled([
       listSentryIssues(project, { limit: 10 }),
       sentryDailyEvents(project, firstRun ? 90 : 7),
     ]);
-    await writeInsight(site.id, "sentry", "issues", issues);
-    await writeDaily(site.id, "sentry", { events });
-    return `${issues.total} unresolved`;
+    if (issues.status === "fulfilled") await writeInsight(site.id, "sentry", "issues", issues.value);
+    if (events.status === "fulfilled") await writeDaily(site.id, "sentry", { events: events.value });
+    if (issues.status === "rejected") throw issues.reason;
+    if (events.status === "rejected") {
+      throw new Error(`Issues OK (${issues.value.total} unresolved) but event stats failed: ${errorMessage(events.reason)}`);
+    }
+    return `${issues.value.total} unresolved`;
   },
 };
 

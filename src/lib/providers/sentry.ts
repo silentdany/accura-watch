@@ -1,4 +1,4 @@
-import { fetchJson } from "@/lib/http";
+import { fetchJson, HttpError } from "@/lib/http";
 import { getSentryCreds, type SentryCreds } from "@/lib/integrations";
 
 async function creds(): Promise<SentryCreds> {
@@ -8,10 +8,21 @@ async function creds(): Promise<SentryCreds> {
 }
 
 async function sentry<T>(c: SentryCreds, path: string): Promise<{ data: T; headers: Headers }> {
-  return fetchJson<T>(`${c.host}/api/0${path}`, {
-    headers: { Authorization: `Bearer ${c.token}` },
-    label: "Sentry",
-  });
+  try {
+    return await fetchJson<T>(`${c.host}/api/0${path}`, {
+      headers: { Authorization: `Bearer ${c.token}` },
+      label: "Sentry",
+    });
+  } catch (err) {
+    if (err instanceof HttpError && (err.status === 401 || err.status === 403)) {
+      const endpoint = path.split("?")[0];
+      const hint = c.token.startsWith("sntrys_")
+        ? "This is an Organization token, which can't read issues or stats — create a User Auth Token (Settings → Account → Personal Tokens) with org:read, project:read, event:read."
+        : `Check the token scopes (org:read, project:read, event:read) and that org "${c.org}" is correct.`;
+      throw new Error(`Sentry ${err.status} on ${endpoint} (org "${c.org}"). ${hint}`);
+    }
+    throw err;
+  }
 }
 
 export type SentryProject = { id: string; slug: string; name: string; platform: string | null };
