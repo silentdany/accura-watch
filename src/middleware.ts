@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
 /** Paths that authenticate themselves (Bearer token / cron secret) or are public. */
-const PUBLIC = ["/login", "/api/auth", "/api/cron", "/api/mcp", "/api/v1", "/llms.txt"];
+const PUBLIC = ["/login", "/api/auth", "/api/cron", "/api/mcp", "/api/v1", "/llms.txt", "/robots.txt"];
 
 /**
  * Edge filter only: cookie presence.
