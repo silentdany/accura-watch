@@ -1,4 +1,4 @@
-import { fetchJson } from "@/lib/http";
+import { errorMessage, fetchJson } from "@/lib/http";
 import {
   getAhrefsCreds,
   getDataForSeoCreds,
@@ -74,11 +74,18 @@ type OrganicMetrics = {
 };
 
 async function organicOverview(c: DataForSeoCreds, domain: string) {
-  const { result, cost } = await dfs<{ items?: { metrics?: { organic?: OrganicMetrics } }[] }>(
-    c,
-    "/dataforseo_labs/google/domain_rank_overview/live",
-    { target: domain, location_code: c.locationCode, language_code: c.languageCode },
-  );
+  type Overview = { items?: { metrics?: { organic?: OrganicMetrics } }[] };
+  const path = "/dataforseo_labs/google/domain_rank_overview/live";
+  const base = { target: domain, location_code: c.locationCode };
+  let res: { result: Overview | null; cost: number };
+  try {
+    res = await dfs<Overview>(c, path, { ...base, language_code: c.languageCode });
+  } catch (e) {
+    // Labs only supports some languages per location (e.g. France = fr only): fall back to the location's default.
+    if (!/language_code/.test(errorMessage(e))) throw e;
+    res = await dfs<Overview>(c, path, base);
+  }
+  const { result, cost } = res;
   const m = result?.items?.[0]?.metrics?.organic ?? {};
   const top3 = (m.pos_1 ?? 0) + (m.pos_2_3 ?? 0);
   return {
