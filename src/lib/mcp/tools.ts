@@ -15,7 +15,7 @@ import {
   siteUpdate,
   updateSite,
 } from "@/lib/sites";
-import { runCollection, SOURCES } from "@/lib/collect";
+import { runCollection, SOURCES, type Source } from "@/lib/collect";
 import { integrationStatuses } from "@/lib/integrations";
 import { querySearchAnalytics } from "@/lib/providers/google";
 import { runHogql } from "@/lib/providers/posthog";
@@ -90,7 +90,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_site_insights",
     title: "Site insights",
     description:
-      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, DataForSEO traffic estimate vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20), per-page search share, and authority history.",
+      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, DataForSEO traffic estimate vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), new referring domains → clicks (weekly, 0–8 week lag), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20) with volume/difficulty/intent, share of voice, clicks by search intent, per-page search share, organic competitors with traffic calibrated on this site's real-vs-estimated ratio, content gaps, backlink velocity and authority history.",
     input: z.object({ site: siteArg, range: rangeArg }),
     annotations: { readOnlyHint: true },
     async handler({ site, range }) {
@@ -303,7 +303,7 @@ export const TOOLS: ToolDef[] = [
     name: "sync_now",
     title: "Sync data now",
     description: `Collect fresh data now (ignores cadence). Sources: ${SOURCES.join(", ")}. Omit site to sync everything (may take a minute).`,
-    input: z.object({ site: z.string().optional(), sources: z.array(z.enum(["health", "gsc", "posthog", "sentry", "seo"])).optional() }),
+    input: z.object({ site: z.string().optional(), sources: z.array(z.enum(SOURCES as [Source, ...Source[]])).optional() }),
     annotations: { openWorldHint: true },
     async handler({ site, sources }) {
       const siteIds = site ? [(await resolveSite(site)).id] : undefined;

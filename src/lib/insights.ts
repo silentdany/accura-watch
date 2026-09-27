@@ -11,15 +11,17 @@ import { addDays, utcDay, ymd, type Range } from "@/lib/dates";
 
 export type Ratio = { value: number; prev: number | null };
 
-export type MetricKey = "clicks" | "impressions" | "position" | "visitors" | "errors" | "latency";
+export type MetricKey = "clicks" | "impressions" | "position" | "visitors" | "errors" | "latency" | "links";
 
 export type Correlation = {
   driver: MetricKey;
   outcome: MetricKey;
-  /** Days between a change in the driver and the outcome. */
+  /** Time between a change in the driver and the outcome, in `unit`s. */
   lag: number;
-  /** Pearson r on detrended daily values (position sign flipped: positive = better ranking). */
+  unit: "day" | "week";
+  /** Pearson r on detrended values (position sign flipped: positive = better ranking). */
   r: number;
+  /** Number of paired data points (days or weeks). */
   days: number;
   strength: "strong" | "moderate" | "weak" | "none";
   sentence: string;
@@ -34,6 +36,30 @@ export type QueryOpportunity = {
   expectedCtr: number;
   /** Extra clicks per 28 days if CTR matched the typical CTR at this position. */
   missedClicks: number;
+  /** DataForSEO keyword metrics, when collected. */
+  volume: number | null;
+  difficulty: number | null;
+  intent: string | null;
+};
+
+export type CompetitorRow = {
+  domain: string;
+  sharedKeywords: number;
+  keywords: number;
+  /** DataForSEO's traffic estimate. */
+  etv: number;
+  /** Estimate corrected by this site's real-vs-estimated ratio. */
+  calibratedTraffic: number | null;
+};
+
+export type ContentGap = {
+  keyword: string;
+  volume: number | null;
+  difficulty: number | null;
+  intent: string | null;
+  competitor: string;
+  competitorRank: number | null;
+  competitors: number;
 };
 
 export type PageJoin = {
@@ -51,8 +77,20 @@ export type SiteInsights = {
   searchShare: Ratio | null;
   /** Sentry error events per 1,000 visitors. */
   errorsPer1k: Ratio | null;
-  /** DataForSEO's estimated monthly organic traffic vs real Search Console clicks over the last 30 days. */
-  estimateVsReal: { estimated: number; real: number } | null;
+  /**
+   * Real Search Console clicks ÷ DataForSEO's traffic estimate, median over past months.
+   * Used to calibrate competitor traffic estimates.
+   */
+  calibration: { ratio: number; months: number; estimated: number; real: number } | null;
+  /** Impressions ÷ monthly search volume over the top queries (28 days, volume scaled to 28 days). */
+  shareOfVoice: { value: number; queries: number } | null;
+  /** Search clicks by DataForSEO search intent (top queries). */
+  intentMix: { intent: string; clicks: number; share: number }[];
+  /** Referring domains gained / lost over the last 28 days. */
+  links28d: { gained: number; lost: number } | null;
+  competitors: CompetitorRow[];
+  contentGaps: ContentGap[];
+  competitorsUpdatedAt: string | null;
   /** Search clicks (28d) per referring domain. */
   clicksPerReferringDomain: number | null;
   correlations: Correlation[];
@@ -119,6 +157,7 @@ const PHRASE: Record<MetricKey, { hi: string; lo: string }> = {
   visitors: { hi: "more visitors", lo: "fewer visitors" },
   errors: { hi: "more errors", lo: "fewer errors" },
   latency: { hi: "slower responses", lo: "faster responses" },
+  links: { hi: "more new referring domains", lo: "fewer new referring domains" },
 };
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
@@ -128,6 +167,7 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   visitors: "Visitors",
   errors: "Errors",
   latency: "Response time",
+  links: "New referring domains",
 };
 
 const PAIRS: { driver: MetricKey; outcome: MetricKey; maxLag: number }[] = [
@@ -146,10 +186,10 @@ function strength(r: number): Correlation["strength"] {
   return a >= 0.6 ? "strong" : a >= 0.4 ? "moderate" : a >= 0.25 ? "weak" : "none";
 }
 
-function sentence(driver: MetricKey, outcome: MetricKey, lag: number, r: number, s: Correlation["strength"]): string {
+function sentence(driver: MetricKey, outcome: MetricKey, lag: number, r: number, s: Correlation["strength"], unit: Correlation["unit"] = "day"): string {
   const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
   if (s === "none") return `No measurable link between ${METRIC_LABEL[driver].toLowerCase()} and ${METRIC_LABEL[outcome].toLowerCase()}.`;
-  const link = lag === 0 ? "go with" : `are followed ${lag} day${lag > 1 ? "s" : ""} later by`;
+  const link = lag === 0 ? (unit === "week" ? "go with, the same week," : "go with") : `are followed ${lag} ${unit}${lag > 1 ? "s" : ""} later by`;
   return `${cap(PHRASE[driver].hi)} ${link} ${r > 0 ? PHRASE[outcome].hi : PHRASE[outcome].lo}.`;
 }
 
@@ -184,6 +224,7 @@ function correlate(series: Partial<Record<MetricKey, Map<string, number>>>, ds: 
       driver,
       outcome,
       lag: s === "none" ? 0 : best.lag,
+      unit: "day",
       r: Number(best.r.toFixed(2)),
       days: best.n,
       strength: s,
@@ -193,6 +234,78 @@ function correlate(series: Partial<Record<MetricKey, Map<string, number>>>, ds: 
   const order = { strong: 0, moderate: 1, weak: 2, none: 3 };
   return out.sort((x, y) => order[x.strength] - order[y.strength] || Math.abs(y.r) - Math.abs(x.r));
 }
+
+/** Sum daily values into weeks ending on each Sunday; the current (partial) week is dropped. */
+function weekly(m: Map<string, number>, ds: string[]): { weeks: string[]; values: Map<string, number> } {
+  const values = new Map<string, number>();
+  const weeks: string[] = [];
+  let acc = 0;
+  let n = 0;
+  for (const d of ds) {
+    if (m.has(d)) {
+      acc += m.get(d)!;
+      n++;
+    }
+    if (new Date(`${d}T00:00:00Z`).getUTCDay() === 0) {
+      weeks.push(d);
+      if (n >= 5) values.set(d, acc);
+      acc = 0;
+      n = 0;
+    }
+  }
+  return { weeks, values };
+}
+
+/** New referring domains → search clicks, week by week, lag 0–8 weeks (links take time to count). */
+function linksToClicks(links: Map<string, number>, clicks: Map<string, number>, ds: string[]): Correlation | null {
+  const a = weekly(links, ds);
+  const b = weekly(clicks, ds);
+  const detrendW = (w: { weeks: string[]; values: Map<string, number> }) => {
+    const out = new Map<string, number>();
+    w.weeks.forEach((wk, i) => {
+      const v = w.values.get(wk);
+      const prev = w.weeks.slice(Math.max(0, i - 4), i).map((x) => w.values.get(x)).filter((x): x is number => x != null);
+      if (v != null && prev.length >= 3) out.set(wk, v - prev.reduce((s2, x) => s2 + x, 0) / prev.length);
+    });
+    return out;
+  };
+  const da = detrendW(a);
+  const db = detrendW(b);
+  const weeks = a.weeks;
+  let best: { lag: number; r: number; n: number } | null = null;
+  for (let lag = 0; lag <= 8; lag++) {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    weeks.forEach((wk, i) => {
+      const x = da.get(wk);
+      const y = weeks[i + lag] ? db.get(weeks[i + lag]) : undefined;
+      if (x != null && y != null) {
+        xs.push(x);
+        ys.push(y);
+      }
+    });
+    if (xs.length < 12) continue;
+    const r = pearson(xs, ys);
+    if (!best || Math.abs(r) > Math.abs(best.r)) best = { lag, r, n: xs.length };
+  }
+  if (!best) return null;
+  const st = strength(best.r);
+  return {
+    driver: "links",
+    outcome: "clicks",
+    lag: st === "none" ? 0 : best.lag,
+    unit: "week",
+    r: Number(best.r.toFixed(2)),
+    days: best.n,
+    strength: st,
+    sentence: sentence("links", "clicks", best.lag, best.r, st, "week"),
+  };
+}
+
+const median = (xs: number[]) => {
+  const v = [...xs].sort((x, y) => x - y);
+  return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+};
 
 const pathOf = (u: string) => {
   const p = u.replace(/^https?:\/\/[^/]+/, "").split(/[?#]/)[0] || "/";
@@ -204,17 +317,25 @@ const pathOf = (u: string) => {
 type TopRow = { key: string; clicks: number; impressions: number; ctr: number; position: number };
 
 const WINDOW = 90;
+const LONG_DAYS = 400;
 
 export async function loadSiteInsights(site: Site, range: Range): Promise<SiteInsights> {
   const today = utcDay();
   const since = addDays(today, -(Math.max(WINDOW, range * 2) + 10));
   const [metrics, seo, checks, insights] = await Promise.all([
     prisma.dailyMetric.findMany({
-      where: { siteId: site.id, source: { in: ["gsc", "posthog", "sentry"] }, date: { gte: since } },
+      // Search Console over ~13 months: monthly calibration and the weekly links → clicks correlation need it.
+      where: {
+        siteId: site.id,
+        OR: [
+          { source: { in: ["posthog", "sentry"] }, date: { gte: since } },
+          { source: "gsc", date: { gte: addDays(today, -LONG_DAYS) } },
+        ],
+      },
       select: { source: true, key: true, date: true, value: true },
     }),
     prisma.dailyMetric.findMany({
-      where: { siteId: site.id, source: "seo", date: { gte: addDays(today, -400) } },
+      where: { siteId: site.id, source: "seo", date: { gte: addDays(today, -6 * 365) } },
       select: { key: true, date: true, value: true },
       orderBy: { date: "asc" },
     }),
@@ -228,6 +349,7 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
         OR: [
           { source: "gsc", kind: { in: ["top_queries", "top_pages"] } },
           { source: "posthog", kind: "top_pages" },
+          { source: "seo", kind: { in: ["keywords", "competitors"] } },
         ],
       },
     }),
@@ -295,13 +417,42 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
         ? ["OPR", opr]
         : [null, []];
   const referringDomains = seoSeries("referring_domains");
-  const organicKeywords = seoSeries("organic_keywords");
+  // Monthly history from historical_rank_overview when collected, else the weekly snapshots.
+  const monthlyKeywords = seoSeries("monthly_keywords");
+  const organicKeywords = monthlyKeywords.length >= 2 ? monthlyKeywords : seoSeries("organic_keywords");
 
-  let estimateVsReal: SiteInsights["estimateVsReal"] = null;
-  const etv = seoSeries("organic_etv").pop();
-  if (etv && hasGsc) {
-    const end = new Date(`${[...clicks.keys()].sort().pop()}T00:00:00Z`);
-    estimateVsReal = { estimated: etv.value, real: sum(clicks, days(end, 30)) };
+  // Calibration: real clicks ÷ DataForSEO estimate, per fully-covered month, median of the last 12.
+  let calibration: SiteInsights["calibration"] = null;
+  if (hasGsc) {
+    const ratios: { real: number; est: number }[] = [];
+    for (const mo of seoSeries("monthly_etv").slice(-13)) {
+      if (mo.value <= 0) continue;
+      const start = new Date(`${mo.date}T00:00:00Z`);
+      const next = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+      const inMonth = days(addDays(next, -1), Math.round((next.getTime() - start.getTime()) / 86_400_000));
+      if (inMonth.filter((d) => clicks.has(d)).length < inMonth.length - 2) continue;
+      ratios.push({ real: sum(clicks, inMonth), est: mo.value });
+    }
+    if (ratios.length) {
+      const last = ratios.at(-1)!;
+      calibration = { ratio: median(ratios.map((x) => x.real / x.est)), months: ratios.length, estimated: last.est, real: last.real };
+    } else {
+      const etv = seoSeries("organic_etv").pop();
+      if (etv && etv.value > 0) {
+        const end = new Date(`${[...clicks.keys()].sort().pop()}T00:00:00Z`);
+        const real = sum(clicks, days(end, 30));
+        calibration = { ratio: real / etv.value, months: 0, estimated: etv.value, real };
+      }
+    }
+  }
+
+  // Backlink velocity
+  const newRd = new Map(seoSeries("new_referring_domains").map((p) => [p.date, p.value]));
+  const lostRd = new Map(seoSeries("lost_referring_domains").map((p) => [p.date, p.value]));
+  let links28d: SiteInsights["links28d"] = null;
+  if (newRd.size) {
+    const last28 = days(addDays(today, -1), 28);
+    links28d = { gained: sum(newRd, last28), lost: sum(lostRd, last28) };
   }
 
   let clicksPerReferringDomain: number | null = null;
@@ -328,13 +479,31 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
     },
     corrDays,
   );
+  if (hasGsc && newRd.size) {
+    const netRd = new Map([...newRd].map(([d, v]) => [d, v - (lostRd.get(d) ?? 0)]));
+    const c = linksToClicks(netRd, clicks, days(today, LONG_DAYS));
+    if (c) {
+      correlations.push(c);
+      const order = { strong: 0, moderate: 1, weak: 2, none: 3 };
+      correlations.sort((x, y) => order[x.strength] - order[y.strength] || Math.abs(y.r) - Math.abs(x.r));
+    }
+  }
 
   // Query opportunities
   const ins = <T,>(source: string, kind: string) => insights.find((i) => i.source === source && i.kind === kind)?.data as T | undefined;
   const queries = ins<{ rows: TopRow[] }>("gsc", "top_queries")?.rows ?? [];
+  const kw = new Map(
+    (ins<{ rows: { keyword: string; volume: number | null; difficulty: number | null; intent: string | null }[] }>("seo", "keywords")?.rows ?? []).map(
+      (r) => [r.keyword.toLowerCase(), r],
+    ),
+  );
   const opp = (q: TopRow): QueryOpportunity => {
     const expected = typicalCtr(q.position);
+    const k = kw.get(q.key.toLowerCase());
     return {
+      volume: k?.volume ?? null,
+      difficulty: k?.difficulty ?? null,
+      intent: k?.intent ?? null,
       query: q.key,
       impressions: q.impressions,
       clicks: q.clicks,
@@ -353,8 +522,38 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
   const strikingDistance = queries
     .filter((q) => q.position > 10 && q.position <= 20 && q.impressions >= 20)
     .map((q) => ({ ...opp(q), missedClicks: Math.round(q.impressions * typicalCtr(8) - q.clicks) }))
-    .sort((a, b) => b.impressions - a.impressions)
+    .sort((a, b) => (b.volume ?? b.impressions) - (a.volume ?? a.impressions))
     .slice(0, 6);
+
+  // Share of voice & intent mix (needs DataForSEO keyword metrics)
+  let shareOfVoice: SiteInsights["shareOfVoice"] = null;
+  const withVolume = queries.filter((q) => (kw.get(q.key.toLowerCase())?.volume ?? 0) > 0);
+  if (withVolume.length) {
+    const impr = withVolume.reduce((a, q) => a + q.impressions, 0);
+    const vol = withVolume.reduce((a, q) => a + kw.get(q.key.toLowerCase())!.volume! * (28 / 30.4), 0);
+    shareOfVoice = { value: impr / vol, queries: withVolume.length };
+  }
+  const byIntent = new Map<string, number>();
+  for (const q of queries) {
+    const intent = kw.get(q.key.toLowerCase())?.intent;
+    if (intent) byIntent.set(intent, (byIntent.get(intent) ?? 0) + q.clicks);
+  }
+  const intentTotal = [...byIntent.values()].reduce((a, v) => a + v, 0);
+  const intentMix = intentTotal
+    ? [...byIntent].map(([intent, c]) => ({ intent, clicks: c, share: c / intentTotal })).sort((a, b) => b.clicks - a.clicks)
+    : [];
+
+  // Competitors & content gaps
+  const comp = ins<{
+    competitors: { domain: string; sharedKeywords: number; keywords: number; etv: number }[];
+    gaps: ContentGap[];
+    collectedAt?: string;
+  }>("seo", "competitors");
+  const competitors: CompetitorRow[] = (comp?.competitors ?? []).map((c) => ({
+    ...c,
+    calibratedTraffic: calibration ? c.etv * calibration.ratio : null,
+  }));
+  const contentGaps = (comp?.gaps ?? []).slice(0, 12);
 
   // Pages: search clicks vs PostHog visitors (both last 28 days)
   const gscPages = new Map<string, number>();
@@ -382,7 +581,13 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
   return {
     searchShare,
     errorsPer1k,
-    estimateVsReal,
+    calibration,
+    shareOfVoice,
+    intentMix,
+    links28d,
+    competitors,
+    contentGaps,
+    competitorsUpdatedAt: comp?.collectedAt ?? null,
     clicksPerReferringDomain,
     correlations,
     correlationWindowDays: WINDOW,

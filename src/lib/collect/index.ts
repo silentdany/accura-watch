@@ -82,7 +82,9 @@ export async function runCollection(opts: CollectOptions = {}): Promise<{
         continue;
       }
       const st = stateOf(site.id, source);
-      const dueAt = st ? st.lastRunAt.getTime() + c.cadenceMinutes(connected) * 60_000 : 0;
+      // A failed run is retried within 6 h instead of waiting a full (weekly/monthly) cadence.
+      const cadence = st && !st.ok ? Math.min(c.cadenceMinutes(connected), 360) : c.cadenceMinutes(connected);
+      const dueAt = st ? st.lastRunAt.getTime() + cadence * 60_000 : 0;
       if (!opts.force && dueAt > Date.now()) {
         results.push({ site: site.slug, source, status: "not_due" });
         continue;

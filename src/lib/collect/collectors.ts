@@ -4,13 +4,13 @@ import { addDays, utcDay, ymd, DAY_MS } from "@/lib/dates";
 import { querySearchAnalytics, type GscRow } from "@/lib/providers/google";
 import { hostClause, runHogql } from "@/lib/providers/posthog";
 import { listSentryIssues, sentryDailyEvents } from "@/lib/providers/sentry";
-import { fetchDomainSeo } from "@/lib/providers/seo";
+import { backlinksNewLost, competitorsAndGaps, fetchDomainSeo, keywordOverview, rankHistory } from "@/lib/providers/seo";
 import { checkHealth } from "@/lib/providers/health";
 import { writeDaily, writeInsight, type Point } from "./store";
 import { errorMessage } from "@/lib/http";
 
-export type Source = "health" | "gsc" | "posthog" | "sentry" | "seo";
-export const SOURCES: Source[] = ["health", "gsc", "posthog", "sentry", "seo"];
+export type Source = "health" | "gsc" | "posthog" | "sentry" | "seo" | "backlinks" | "rank_history" | "competitors" | "keywords";
+export const SOURCES: Source[] = ["health", "gsc", "posthog", "sentry", "seo", "backlinks", "rank_history", "competitors", "keywords"];
 
 export type Connected = {
   google: boolean;
@@ -239,6 +239,80 @@ const seo: Collector = {
   },
 };
 
+// ─── DataForSEO extras (history, competitors, keyword metrics) ───────────────
+
+const WEEK = 7 * 1440 - 60;
+const MONTH = 30 * 1440 - 60;
+const needsDfs = (_site: Site, c: Connected) => (!c.dataforseo ? "DataForSEO not connected" : null);
+const usd = (cost: number) => (cost ? ` · cost $${cost.toFixed(4)}` : "");
+
+const backlinks: Collector = {
+  source: "backlinks",
+  label: "Backlink history",
+  cadenceMinutes: () => WEEK,
+  skipReason: needsDfs,
+  async run(site, { firstRun }) {
+    // First run backfills 16 months (to line up with Search Console history); then a 2-week overlap.
+    const { days, cost } = await backlinksNewLost(site.domain, ymd(addDays(utcDay(), firstRun ? -490 : -14)));
+    const pts = (f: (d: (typeof days)[number]) => number) => days.map((d) => ({ date: d.date, value: f(d) }));
+    await writeDaily(site.id, "seo", {
+      new_backlinks: pts((d) => d.newBacklinks),
+      lost_backlinks: pts((d) => d.lostBacklinks),
+      new_referring_domains: pts((d) => d.newReferringDomains),
+      lost_referring_domains: pts((d) => d.lostReferringDomains),
+    });
+    return `${days.length} days${usd(cost)}`;
+  },
+};
+
+const rankHist: Collector = {
+  source: "rank_history",
+  label: "Ranking history",
+  cadenceMinutes: () => MONTH,
+  skipReason: needsDfs,
+  async run(site, { firstRun }) {
+    const { months, cost } = await rankHistory(site.domain, firstRun ? "2020-01-01" : ymd(addDays(utcDay(), -95)));
+    const pts = (f: (m: (typeof months)[number]) => number) => months.map((m) => ({ date: m.month, value: f(m) }));
+    await writeDaily(site.id, "seo", {
+      monthly_keywords: pts((m) => m.keywords),
+      monthly_etv: pts((m) => m.etv),
+      monthly_top10: pts((m) => m.top10),
+    });
+    return `${months.length} months${usd(cost)}`;
+  },
+};
+
+const competitors: Collector = {
+  source: "competitors",
+  label: "Competitors",
+  cadenceMinutes: () => MONTH,
+  skipReason: needsDfs,
+  async run(site) {
+    const r = await competitorsAndGaps(site.domain);
+    await writeInsight(site.id, "seo", "competitors", {
+      competitors: r.competitors,
+      gaps: r.gaps.slice(0, 60),
+      collectedAt: new Date().toISOString(),
+    });
+    return `${r.competitors.length} competitors, ${r.gaps.length} gaps${usd(r.cost)}`;
+  },
+};
+
+const keywords: Collector = {
+  source: "keywords",
+  label: "Keyword metrics",
+  cadenceMinutes: () => WEEK,
+  skipReason: (site, c) => (!c.dataforseo ? "DataForSEO not connected" : !site.gscProperty ? "No Search Console property" : null),
+  async run(site) {
+    const top = await prisma.insight.findUnique({ where: { siteId_source_kind: { siteId: site.id, source: "gsc", kind: "top_queries" } } });
+    const queries = ((top?.data as { rows?: { key: string }[] } | null)?.rows ?? []).map((r) => r.key);
+    if (!queries.length) throw new Error("No Search Console queries yet — waiting for the first GSC sync");
+    const { rows, cost } = await keywordOverview(queries);
+    await writeInsight(site.id, "seo", "keywords", { rows, collectedAt: new Date().toISOString() });
+    return `${rows.length} keywords${usd(cost)}`;
+  },
+};
+
 // ─── Health ─────────────────────────────────────────────────────────────────
 
 const health: Collector = {
@@ -265,4 +339,14 @@ const health: Collector = {
   },
 };
 
-export const COLLECTORS: Record<Source, Collector> = { health, gsc, posthog, sentry, seo };
+export const COLLECTORS: Record<Source, Collector> = {
+  health,
+  gsc,
+  posthog,
+  sentry,
+  seo,
+  backlinks,
+  rank_history: rankHist,
+  competitors,
+  keywords,
+};

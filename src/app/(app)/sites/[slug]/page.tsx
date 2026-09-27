@@ -12,7 +12,7 @@ import { RangeTabs } from "@/components/range-tabs";
 import { SyncButton } from "@/components/forms";
 import { Legend, TimeSeriesChart } from "@/components/chart";
 import { loadSiteInsights } from "@/lib/insights";
-import { AuthorityGlance, CorrelationsCard, InsightTiles, OpportunitiesCard, PagesJoinCard } from "@/components/insights";
+import { AuthorityGlance, CompetitorsCard, ContentGapsCard, CorrelationsCard, InsightTiles, OpportunitiesCard, PagesJoinCard } from "@/components/insights";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -275,6 +275,8 @@ export default async function SitePage({ params, searchParams }: Params) {
         <div className="min-w-0 xl:col-span-2">
           <PagesJoinCard i={insights} />
         </div>
+        <CompetitorsCard i={insights} />
+        <ContentGapsCard i={insights} />
       </div>
 
       {/* Search & SEO */}
