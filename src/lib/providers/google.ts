@@ -1,5 +1,5 @@
 import { createSign } from "node:crypto";
-import { fetchJson } from "@/lib/http";
+import { errorMessage, fetchJson } from "@/lib/http";
 import { appUrl, env } from "@/lib/env";
 import { getGoogleCreds, type GoogleCreds } from "@/lib/integrations";
 import { normalizePrivateKey } from "@/lib/google-key";
@@ -40,7 +40,7 @@ export async function exchangeGoogleCode(
 ): Promise<{ refreshToken: string; email: string | null }> {
   const app = googleOAuthApp();
   if (!app) throw new Error("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set");
-  const { data } = await fetchJson<{ refresh_token?: string; id_token?: string }>(TOKEN_URL, {
+  const { data } = await fetchJson<{ refresh_token?: string; id_token?: string; scope?: string }>(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -52,6 +52,10 @@ export async function exchangeGoogleCode(
     }),
     label: "Google token",
   });
+  // Google's consent screen lets the user untick sensitive scopes; the token then works but every GSC call 403s.
+  if (data.scope && !data.scope.split(" ").includes(GSC_SCOPE)) {
+    throw new Error("Search Console access was not granted — reconnect and tick “View Search Console data” on the Google consent screen");
+  }
   if (!data.refresh_token) {
     throw new Error("Google did not return a refresh token — revoke access at myaccount.google.com/permissions and retry");
   }
@@ -120,16 +124,25 @@ async function gsc<T>(path: string, init: RequestInit = {}): Promise<T> {
   const creds = await getGoogleCreds();
   if (!creds) throw new Error("Google Search Console is not connected");
   const token = await accessToken(creds);
-  const { data } = await fetchJson<T>(`${API}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    label: "Search Console",
-  });
-  return data;
+  try {
+    const { data } = await fetchJson<T>(`${API}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      label: "Search Console",
+    });
+    return data;
+  } catch (e) {
+    if (creds.mode === "oauth" && /insufficient authentication scopes/i.test(errorMessage(e))) {
+      throw new Error(
+        `${errorMessage(e)} Reconnect Google in Settings and tick “View Search Console data” on the consent screen.`,
+      );
+    }
+    throw e;
+  }
 }
 
 // ─── Search Console API ─────────────────────────────────────────────────────
