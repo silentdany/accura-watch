@@ -110,24 +110,19 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:items-start">
-        <Card className="lg:col-span-2">
-          <CardHeader title={t.home.summaryTitle} hint={t.period.last(range)} />
-          <ul className="flex flex-col gap-3.5 px-5 pb-5 pt-1">
-            {lines.map((l, i) => (
-              <li key={i} className="flex items-start gap-3 text-[15px] leading-snug">
-                <span className="mt-px shrink-0" aria-hidden>
-                  {l.icon}
-                </span>
-                {l.text}
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <div className="lg:col-span-3">
-          <AlertList alerts={o.alerts} max={6} />
-        </div>
-      </div>
+      <Card>
+        <CardHeader title={t.home.summaryTitle} hint={t.period.last(range)} />
+        <ul className="grid grid-cols-1 gap-x-8 gap-y-3.5 px-5 pb-5 pt-1 md:grid-cols-2">
+          {lines.map((l, i) => (
+            <li key={i} className="flex items-start gap-3 text-[15px] leading-snug">
+              <span className="mt-px shrink-0" aria-hidden>
+                {l.icon}
+              </span>
+              {l.text}
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat
@@ -189,6 +184,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
         </Card>
       ) : null}
+
+      <AlertList alerts={o.alerts} max={6} />
 
       <Link href="/settings#agent" className="card group flex items-center gap-4 border-dashed p-5 transition-colors hover:bg-card-hover">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
