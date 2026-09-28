@@ -51,24 +51,19 @@ export async function SummaryTab({ r, i, range }: { r: SiteReport; i: SiteInsigh
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:items-start">
-        <Card className="lg:col-span-2">
-          <CardHeader title={t.site.summaryTitle} hint={t.period.last(range)} />
-          <ul className="flex flex-col gap-3.5 px-5 pb-5 pt-1">
-            {lines.map((l, k) => (
-              <li key={k} className="flex items-start gap-3 text-[15px] leading-snug">
-                <span className="mt-px shrink-0" aria-hidden>
-                  {l.icon}
-                </span>
-                {l.text}
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <div className="lg:col-span-3">
-          <AlertList alerts={r.alerts} withSite={false} />
-        </div>
-      </div>
+      <Card>
+        <CardHeader title={t.site.summaryTitle} hint={t.period.last(range)} />
+        <ul className="grid grid-cols-1 gap-x-8 gap-y-3.5 px-5 pb-5 pt-1 md:grid-cols-2">
+          {lines.map((l, k) => (
+            <li key={k} className="flex items-start gap-3 text-[15px] leading-snug">
+              <span className="mt-px shrink-0" aria-hidden>
+                {l.icon}
+              </span>
+              {l.text}
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat
@@ -160,6 +155,8 @@ export async function SummaryTab({ r, i, range }: { r: SiteReport; i: SiteInsigh
           </div>
         </Card>
       ) : null}
+
+      <AlertList alerts={r.alerts} withSite={false} />
     </div>
   );
 }

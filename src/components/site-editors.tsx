@@ -95,7 +95,7 @@ export function SiteEditor({ site, catalogs }: { site: EditableSite; catalogs: C
           <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm">
             <p className="mb-1 font-semibold text-destructive">{s.syncProblems}</p>
             {errors.map((e) => (
-              <p key={e.source} className="break-words text-foreground">
+              <p key={e.source} className="text-foreground [overflow-wrap:anywhere]">
                 <span className="font-medium">{sourceName(e.source)}</span> · {e.error}
               </p>
             ))}
