@@ -1,4 +1,4 @@
-import { errorMessage, fetchJson } from "@/lib/http";
+import { errorMessage, fetchJson, HttpError } from "@/lib/http";
 import {
   getAhrefsCreds,
   getDataForSeoCreds,
@@ -21,6 +21,17 @@ type DfsEnvelope<T> = {
 };
 
 async function dfs<T>(c: DataForSeoCreds, path: string, body: unknown): Promise<{ result: T | null; cost: number }> {
+  try {
+    return await dfsRaw<T>(c, path, body);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 402) {
+      throw new Error("DataForSEO balance is empty (402 Payment Required) — top up at app.dataforseo.com/billing");
+    }
+    throw e;
+  }
+}
+
+async function dfsRaw<T>(c: DataForSeoCreds, path: string, body: unknown): Promise<{ result: T | null; cost: number }> {
   const { data } = await fetchJson<DfsEnvelope<T>>(`https://api.dataforseo.com/v3${path}`, {
     method: "POST",
     headers: {
