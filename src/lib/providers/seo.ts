@@ -227,9 +227,29 @@ export type BacklinkDay = {
   lostReferringDomains: number;
 };
 
-/** Daily new/lost backlinks and referring domains (history back to 2019). */
-export async function backlinksNewLost(domain: string, dateFrom: string): Promise<{ days: BacklinkDay[]; cost: number }> {
+const isDateFromError = (e: unknown) => /date_from/.test(errorMessage(e));
+
+/**
+ * Daily new/lost backlinks and referring domains over the last `daysBack` days.
+ * The API rejects some start dates without documenting why: shorter windows are tried until one is accepted
+ * (rejected tasks aren't billed).
+ */
+export async function backlinksNewLost(domain: string, daysBack: number): Promise<{ days: BacklinkDay[]; cost: number; daysBack: number }> {
   const c = await dfsCreds();
+  const windows = [daysBack, 365, 180, 90, 30].filter((d, i, a) => d <= daysBack && a.indexOf(d) === i);
+  for (const [i, back] of windows.entries()) {
+    try {
+      return { ...(await backlinksWindow(c, domain, back)), daysBack: back };
+    } catch (e) {
+      if (!isDateFromError(e) || i === windows.length - 1) throw e;
+    }
+  }
+  throw new Error("unreachable");
+}
+
+async function backlinksWindow(c: DataForSeoCreds, domain: string, daysBack: number): Promise<{ days: BacklinkDay[]; cost: number }> {
+  const from = new Date(Date.now() - daysBack * 86_400_000).toISOString().slice(0, 10);
+  const to = new Date().toISOString().slice(0, 10);
   const { result, cost } = await dfs<{
     items?: {
       date: string;
@@ -240,7 +260,8 @@ export async function backlinksNewLost(domain: string, dateFrom: string): Promis
     }[];
   }>(c, "/backlinks/timeseries_new_lost_summary/live", {
     target: domain,
-    date_from: dateFrom,
+    date_from: from,
+    date_to: to,
     group_range: "day",
     include_subdomains: true,
   });
@@ -258,14 +279,23 @@ export async function backlinksNewLost(domain: string, dateFrom: string): Promis
 
 export type RankMonth = { month: string; keywords: number; etv: number; top10: number };
 
-/** Monthly organic keywords / estimated traffic, as far back as DataForSEO has it. */
+/** Earliest date historical_rank_overview accepts. */
+export const RANK_HISTORY_START = "2020-10-01";
+
+/** Monthly organic keywords / estimated traffic from `dateFrom` (falls back to the API's default 6 months if rejected). */
 export async function rankHistory(domain: string, dateFrom: string): Promise<{ months: RankMonth[]; cost: number }> {
   const c = await dfsCreds();
-  const { result, cost } = await dfsLabs<{ items?: { year: number; month: number; metrics?: { organic?: OrganicMetrics } }[] }>(
-    c,
-    "/dataforseo_labs/google/historical_rank_overview/live",
-    { target: domain, date_from: dateFrom },
-  );
+  type R = { items?: { year: number; month: number; metrics?: { organic?: OrganicMetrics } }[] };
+  const path = "/dataforseo_labs/google/historical_rank_overview/live";
+  const from = dateFrom < RANK_HISTORY_START ? RANK_HISTORY_START : dateFrom;
+  let res: { result: R | null; cost: number };
+  try {
+    res = await dfsLabs<R>(c, path, { target: domain, date_from: from });
+  } catch (e) {
+    if (!isDateFromError(e)) throw e;
+    res = await dfsLabs<R>(c, path, { target: domain });
+  }
+  const { result, cost } = res;
   return {
     cost,
     months: (result?.items ?? [])
