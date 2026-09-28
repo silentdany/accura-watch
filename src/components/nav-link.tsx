@@ -7,11 +7,13 @@ export function NavLink({
   href,
   exact = false,
   dense = false,
+  onNavigate,
   children,
 }: {
   href: string;
   exact?: boolean;
   dense?: boolean;
+  onNavigate?: () => void;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -20,8 +22,12 @@ export function NavLink({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-2.5 rounded-md px-2.5 ${dense ? "py-1.5 text-[13px]" : "py-2 text-sm"} transition-colors ${
-        active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={`flex items-center gap-3 rounded-lg px-3 ${dense ? "py-1.5 text-sm" : "py-2 text-[15px]"} transition-colors ${
+        active
+          ? "bg-card font-medium text-foreground shadow-[var(--shadow)] ring-1 ring-border"
+          : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
       }`}
     >
       {children}

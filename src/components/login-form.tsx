@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { useI18n } from "@/i18n/client";
 
 function authErrorMessage(err: unknown, fallback: string): string {
   if (!err) return fallback;
@@ -16,11 +16,11 @@ function authErrorMessage(err: unknown, fallback: string): string {
 }
 
 export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
+  const { t } = useI18n();
+  const l = t.login;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">(
-    signupAllowed ? "signup" : "signin",
-  );
+  const [mode, setMode] = useState<"signin" | "signup">(signupAllowed ? "signup" : "signin");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -30,30 +30,21 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
     setPending(true);
     try {
       if (mode === "signin") {
-        const { error: err } = await authClient.signIn.email({
-          email,
-          password,
-          callbackURL: "/",
-        });
+        const { error: err } = await authClient.signIn.email({ email, password, callbackURL: "/" });
         if (err) {
-          setError(authErrorMessage(err, "Sign in failed"));
+          setError(authErrorMessage(err, l.failedIn));
           setPending(false);
           return;
         }
       } else {
         if (!signupAllowed) {
-          setError("Owner account already exists. Sign in instead.");
+          setError(l.ownerExists);
           setPending(false);
           return;
         }
-        const { error: err } = await authClient.signUp.email({
-          email,
-          password,
-          name: email.split("@")[0],
-          callbackURL: "/",
-        });
+        const { error: err } = await authClient.signUp.email({ email, password, name: email.split("@")[0], callbackURL: "/" });
         if (err) {
-          setError(authErrorMessage(err, "Sign up failed"));
+          setError(authErrorMessage(err, l.failedUp));
           setPending(false);
           return;
         }
@@ -63,92 +54,69 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
       window.location.assign("/");
       return;
     } catch (err) {
-      setError(authErrorMessage(err, "Auth request failed"));
+      setError(authErrorMessage(err, l.failed));
       setPending(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm rounded-[var(--radius-md)] border border-border bg-card p-6 shadow-[0_24px_48px_hsl(0_0%_0%/0.35)]">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-primary" aria-hidden />
-          <h1 className="text-lg font-semibold tracking-tight">Accura Watch</h1>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground" aria-hidden>
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </span>
+          <h1 className="text-2xl font-semibold tracking-tight">{l.title}</h1>
+          <p className="mt-1 text-[15px] text-muted-foreground">{l.subtitle}</p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Single-owner instance — email + password.
-        </p>
-        <form className="mt-6 space-y-3" onSubmit={onSubmit}>
-          <label className="block text-xs text-muted-foreground">
-            Email
-            <input
-              type="email"
-              required
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="mt-1 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
-            />
-          </label>
-          <label className="block text-xs text-muted-foreground">
-            Password
-            <input
-              type="password"
-              required
-              minLength={8}
-              autoComplete={
-                mode === "signin" ? "current-password" : "new-password"
-              }
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="mt-1 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-            />
-          </label>
-          {error ? (
-            <p
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={pending}
-            className="mt-2 w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-70"
-          >
-            {pending
-              ? "Please wait…"
-              : mode === "signin"
-                ? "Sign in"
-                : "Create owner account"}
-          </button>
-        </form>
-        {signupAllowed ? (
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() =>
-                setMode((m) => (m === "signin" ? "signup" : "signin"))
-              }
-            >
-              {mode === "signin"
-                ? "First time? Create owner account"
-                : "Already registered? Sign in"}
+        <div className="card p-6">
+          <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+            <label className="block">
+              <span className="label">{l.email}</span>
+              <input
+                type="email"
+                required
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="label">{l.password}</span>
+              <input
+                type="password"
+                required
+                minLength={8}
+                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="input"
+              />
+            </label>
+            {error ? (
+              <p className="rounded-lg border border-destructive/30 bg-destructive-soft px-3 py-2 text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <button type="submit" disabled={pending} className="btn btn-primary mt-1 w-full py-2.5">
+              {pending ? l.wait : mode === "signin" ? l.signIn : l.signUp}
             </button>
-          </p>
-        ) : (
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            Sign-up closed — owner account exists.
-          </p>
-        )}
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          <Link href="/" className="text-primary hover:underline">
-            ← Back to dashboard
-          </Link>
+          </form>
+        </div>
+        <p className="mt-5 text-center text-sm text-muted-foreground">
+          {signupAllowed ? (
+            <button type="button" className="link font-medium" onClick={() => setMode((m) => (m === "signin" ? "signup" : "signin"))}>
+              {mode === "signin" ? l.toSignUp : l.toSignIn}
+            </button>
+          ) : (
+            l.closed
+          )}
         </p>
       </div>
     </div>

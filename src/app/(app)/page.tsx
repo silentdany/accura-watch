@@ -1,134 +1,107 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Bot, CircleAlert, Info, Search } from "lucide-react";
-import { loadOverview, type Alert } from "@/lib/metrics";
+import { ArrowRight, Bot, Bug, CheckCircle2, OctagonAlert, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { loadOverview } from "@/lib/metrics";
 import { integrationStatuses } from "@/lib/integrations";
-import { ago, parseRange } from "@/lib/dates";
-import { authority, fmtNum, fmtPct, fmtPos } from "@/lib/format";
-import { Card, CardHeader, Delta, PageHeader } from "@/components/ui";
-import { KpiTile } from "@/components/kpi";
+import { parseRange } from "@/lib/dates";
+import { pctChange } from "@/lib/format";
+import { getI18n } from "@/i18n/server";
+import { Card, CardHeader, Delta, PageHeader, Section, Stat } from "@/components/ui";
 import { RangeTabs } from "@/components/range-tabs";
 import { SyncButton } from "@/components/forms";
-import { SitesTable } from "@/components/sites-table";
 import { TimeSeriesChart } from "@/components/chart";
+import { AlertList } from "@/components/alerts";
+import { SiteCard } from "@/components/site-card";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const severityIcon = { critical: CircleAlert, warning: AlertTriangle, info: Info };
-const severityColor = { critical: "text-destructive", warning: "text-warning", info: "text-muted-foreground" };
-
-function Alerts({ alerts }: { alerts: Alert[] }) {
-  if (!alerts.length) return null;
-  return (
-    <Card className="mb-6">
-      <CardHeader title={`Needs attention · ${alerts.length}`} />
-      <ul className="divide-y divide-border/70">
-        {alerts.slice(0, 8).map((a, i) => {
-          const Icon = severityIcon[a.severity];
-          return (
-            <li key={i} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-              <Icon className={`h-4 w-4 shrink-0 ${severityColor[a.severity]}`} aria-label={a.severity} />
-              <Link href={`/sites/${a.site}`} className="shrink-0 font-medium hover:text-primary">
-                {a.siteName}
-              </Link>
-              <span className="min-w-0 truncate text-muted-foreground" title={a.message}>
-                {a.message}
-              </span>
-              <span className="ml-auto shrink-0 text-[11px] uppercase tracking-wider text-subtle">{a.source}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
-}
-
 async function Onboarding() {
+  const { t } = await getI18n();
   const integrations = await integrationStatuses();
   const google = integrations.find((i) => i.id === "google")!;
+  const o = t.home.onboarding;
   const steps = [
-    {
-      done: google.connected,
-      title: "Connect Google Search Console",
-      body: "OAuth or a service account — Search Console is the priority data source.",
-      href: "/settings#google",
-      cta: "Connect",
-    },
-    {
-      done: false,
-      title: "Import your sites",
-      body: "Pick properties from Search Console, or add any domain by hand.",
-      href: "/sites",
-      cta: "Add sites",
-    },
-    {
-      done: integrations.filter((i) => i.connected && i.id !== "google").length > 0,
-      title: "Plug PostHog, Sentry & SEO data",
-      body: "Projects are auto-matched to sites by name. DataForSEO is pay-as-you-go; Open PageRank is free.",
-      href: "/settings",
-      cta: "Integrations",
-    },
-    {
-      done: false,
-      title: "Connect your AI agent",
-      body: "Every metric and action is exposed over MCP — ask Claude for your weekly review.",
-      href: "/settings#mcp",
-      cta: "MCP setup",
-    },
+    { done: google.connected, ...o.google, href: "/settings#google" },
+    { done: false, ...o.sites, href: "/sites" },
+    { done: integrations.some((i) => i.connected && i.id !== "google"), ...o.more, href: "/settings" },
+    { done: false, ...o.agent, href: "/settings#agent" },
   ];
   return (
-    <Card className="overflow-hidden">
-      <div className="border-b border-border bg-[radial-gradient(600px_200px_at_0%_0%,hsl(158_70%_55%/0.08),transparent)] px-6 py-8">
-        <p className="eyebrow">Welcome</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight">All your sites, one glance.</h2>
-        <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-          Search Console first, then analytics, errors, uptime and domain authority — collected on a schedule and queryable by your AI agents.
-        </p>
-      </div>
-      <ol className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+    <>
+      <PageHeader title={o.title} subtitle={o.subtitle} />
+      <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {steps.map((s, i) => (
-          <li key={s.title} className="flex flex-col gap-2 bg-card p-5">
-            <span className={`tabular text-xs font-semibold ${s.done ? "text-primary" : "text-subtle"}`}>{s.done ? "✓ Done" : `Step ${i + 1}`}</span>
-            <p className="font-medium">{s.title}</p>
-            <p className="flex-1 text-sm text-muted-foreground">{s.body}</p>
-            <Link href={s.href} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-              {s.cta} <ArrowRight className="h-3.5 w-3.5" />
+          <li key={s.title} className="card flex flex-col gap-2 p-6">
+            <span className={`text-sm font-medium ${s.done ? "text-good" : "text-subtle"}`}>{s.done ? `✓ ${o.done}` : o.step(i + 1)}</span>
+            <p className="text-lg font-semibold">{s.title}</p>
+            <p className="flex-1 text-[15px] text-muted-foreground">{s.body}</p>
+            <Link href={s.href} className="btn btn-primary mt-2 self-start">
+              {s.cta} <ArrowRight className="h-4 w-4" />
             </Link>
           </li>
         ))}
       </ol>
-    </Card>
+    </>
   );
 }
 
-export default async function OverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
+export default async function HomePage({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
   const range = parseRange((await searchParams).range);
-  const o = await loadOverview(range);
-  const t = o.totals;
+  const [{ t, f }, o] = await Promise.all([getI18n(), loadOverview(range)]);
+  const tot = o.totals;
+  if (o.sites.length === 0) return <Onboarding />;
 
-  if (o.sites.length === 0) {
-    return (
-      <>
-        <PageHeader title="Portfolio" subtitle="No sites yet" />
-        <Onboarding />
-      </>
-    );
+  const s = t.home.summary;
+  const changeText = (cur: number, prev: number) => {
+    const c = pctChange(cur, prev);
+    if (c == null || Math.abs(c) < 0.01) return null;
+    return c > 0 ? s.up(f.pct(c, 0)) : s.down(f.pct(-c, 0));
+  };
+  const gscSites = o.sites.filter((x) => x.gsc);
+  const phSites = o.sites.filter((x) => x.posthog);
+  const sentrySites = o.sites.filter((x) => x.sentry);
+
+  // The "In short" story, most important first.
+  const lines: { icon: React.ReactNode; text: string }[] = [];
+  if (tot.down) lines.push({ icon: <OctagonAlert className="h-5 w-5 text-destructive" />, text: s.someDown(tot.down) });
+  if (gscSites.length) {
+    const c = changeText(tot.clicks, tot.clicksPrev);
+    const up = tot.clicks >= tot.clicksPrev;
+    lines.push({
+      icon: up ? <TrendingUp className="h-5 w-5 text-good" /> : <TrendingDown className="h-5 w-5 text-destructive" />,
+      text: c ? s.clicks(f.num(tot.clicks), c) : s.clicksFlat(f.num(tot.clicks)),
+    });
+  }
+  if (phSites.length) {
+    const c = changeText(tot.visitors, tot.visitorsPrev);
+    lines.push({ icon: <Users className="h-5 w-5 text-muted-foreground" />, text: s.visitors(f.num(tot.visitors), c ?? t.trend.flat.toLowerCase()) });
+  }
+  const best = gscSites
+    .map((x) => ({ x, c: pctChange(x.gsc!.clicks, x.gsc!.clicksPrev) }))
+    .filter((b) => b.c != null && b.c >= 0.1 && b.x.gsc!.clicks >= 20)
+    .sort((a, b) => b.c! - a.c!)[0];
+  if (best && gscSites.length > 1) lines.push({ icon: <TrendingUp className="h-5 w-5 text-good" />, text: s.best(best.x.name, `+${f.pct(best.c!, 0)}`) });
+  if (!tot.down) lines.push({ icon: <CheckCircle2 className="h-5 w-5 text-good" />, text: s.allUp });
+  if (sentrySites.length) {
+    lines.push({
+      icon: tot.unresolved ? <Bug className="h-5 w-5 text-warning" /> : <CheckCircle2 className="h-5 w-5 text-good" />,
+      text: tot.unresolved ? s.issues(f.num(tot.unresolved)) : s.noIssues,
+    });
   }
 
-  // Average only comparable scores: the most common authority label across sites.
-  const auth = o.sites.map((s) => authority(s.seo)).filter((a) => a !== null);
-  const authLabel = (["DR", "Rank", "OPR"] as const).find((l) => auth.some((a) => a.label === l)) ?? null;
-  const authVals = auth.filter((a) => a.label === authLabel).map((a) => (a.label === "OPR" ? a.value / 10 : a.value));
-  const avgAuth = authVals.length ? authVals.reduce((x, y) => x + y, 0) / authVals.length : null;
-  const gscCount = o.sites.filter((s) => s.gsc).length;
-  const phCount = o.sites.filter((s) => s.posthog).length;
-  const sentryCount = o.sites.filter((s) => s.sentry).length;
+  const sites = [...o.sites].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.gsc?.clicks ?? -1) - (a.gsc?.clicks ?? -1));
+  const vs = t.period.vsPrevious(range);
 
   return (
-    <>
+    <div className="flex flex-col gap-8">
       <PageHeader
-        title="Portfolio"
-        subtitle={`${t.sites} sites · last ${range} days vs previous · synced ${ago(o.lastSync)}`}
+        flush
+        title={t.home.hello}
+        subtitle={
+          <>
+            {t.home.intro(o.sites.length)} <span className="text-subtle">· {t.time.updated(f.ago(o.lastSync))}</span>
+          </>
+        }
         right={
           <>
             <RangeTabs value={range} basePath="/" />
@@ -137,90 +110,96 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
-        {/* Hero: Search Console clicks */}
-        <div className="col-span-2 row-span-2 flex flex-col rounded-[var(--radius-md)] border border-border bg-card p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="eyebrow flex items-center gap-1.5">
-                <Search className="h-3 w-3" /> Search clicks
-              </p>
-              <p className="tabular mt-2 text-4xl font-semibold tracking-tight">{fmtNum(t.clicks)}</p>
-              <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                <Delta cur={t.clicks} prev={t.clicksPrev} /> vs {fmtNum(t.clicksPrev)} · {gscCount} site{gscCount === 1 ? "" : "s"}
-              </p>
-            </div>
-          </div>
-          <div className="mt-3 flex-1">
-            <TimeSeriesChart
-              dates={t.clicksSeries.dates}
-              series={[{ name: "Clicks", color: "var(--c-gsc)", values: t.clicksSeries.values }]}
-              height={150}
-              emptyLabel="Connect Search Console to see clicks"
-            />
-          </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:items-start">
+        <Card className="lg:col-span-2">
+          <CardHeader title={t.home.summaryTitle} hint={t.period.last(range)} />
+          <ul className="flex flex-col gap-3.5 px-5 pb-5 pt-1">
+            {lines.map((l, i) => (
+              <li key={i} className="flex items-start gap-3 text-[15px] leading-snug">
+                <span className="mt-px shrink-0" aria-hidden>
+                  {l.icon}
+                </span>
+                {l.text}
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <div className="lg:col-span-3">
+          <AlertList alerts={o.alerts} max={6} />
         </div>
-
-        <KpiTile label="Impressions" color="var(--c-gsc-2)" value={fmtNum(t.impressions)} delta={<Delta cur={t.impressions} prev={t.impressionsPrev} />} />
-        <KpiTile label="CTR" color="var(--c-gsc)" value={fmtPct(t.ctr, 2)} delta={<Delta cur={t.ctr} prev={t.ctrPrev} />} />
-        <KpiTile label="Avg position" color="var(--c-gsc)" value={fmtPos(t.position)} delta={<Delta cur={t.position} prev={t.positionPrev} invert mode="abs" />} />
-        <KpiTile
-          label="Visitors"
-          color="var(--c-posthog)"
-          value={phCount ? fmtNum(t.visitors) : "—"}
-          delta={phCount ? <Delta cur={t.visitors} prev={t.visitorsPrev} /> : undefined}
-          hint={phCount ? undefined : "PostHog not mapped"}
-        />
-        <KpiTile
-          label="Uptime"
-          color="var(--c-health)"
-          value={
-            <span className={t.down ? "text-destructive" : ""}>
-              {t.up}/{t.sites}
-            </span>
-          }
-          hint={t.down ? `${t.down} down` : "all up"}
-        />
-        <KpiTile
-          label="Open issues"
-          color="var(--c-sentry)"
-          value={sentryCount ? fmtNum(t.unresolved) : "—"}
-          hint={sentryCount ? `${fmtNum(t.events)} events` : "Sentry not mapped"}
-          delta={sentryCount ? <Delta cur={t.events} prev={t.eventsPrev} invert /> : undefined}
-        />
-        <KpiTile
-          label="Avg authority"
-          color="var(--c-seo)"
-          value={avgAuth == null ? "—" : authLabel === "OPR" ? avgAuth.toFixed(1) : Math.round(avgAuth)}
-          hint={
-            authLabel === "DR" ? "Ahrefs Domain Rating /100" : authLabel === "Rank" ? "DataForSEO rank /100" : authLabel === "OPR" ? "Open PageRank /10" : "No SEO provider"
-          }
-        />
-        <Link
-          href="/settings#mcp"
-          className="group flex flex-col justify-between gap-2 rounded-[var(--radius-md)] border border-dashed border-border-strong p-4 transition-colors hover:border-primary/50"
-        >
-          <p className="eyebrow flex items-center gap-1.5">
-            <Bot className="h-3 w-3" /> Ask your agent
-          </p>
-          <p className="text-sm text-muted-foreground group-hover:text-foreground">“Which pages lost clicks this month and why?”</p>
-        </Link>
       </div>
 
-      <Card className="mb-6">
-        <CardHeader
-          title="Sites"
-          hint="Click a column to sort · pinned sites stay on top"
-          right={
-            <Link href="/sites" className="text-xs text-muted-foreground hover:text-foreground">
-              Manage →
-            </Link>
-          }
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat
+          label={t.metrics.clicks.label}
+          help={t.metrics.clicks.help}
+          color="var(--c-gsc)"
+          value={gscSites.length ? f.num(tot.clicks) : "—"}
+          delta={gscSites.length ? <Delta cur={tot.clicks} prev={tot.clicksPrev} suffix={vs} /> : null}
         />
-        <SitesTable rows={o.sites} range={range} />
-      </Card>
+        <Stat
+          label={t.metrics.visitors.label}
+          help={t.metrics.visitors.help}
+          color="var(--c-posthog)"
+          value={phSites.length ? f.num(tot.visitors) : "—"}
+          delta={phSites.length ? <Delta cur={tot.visitors} prev={tot.visitorsPrev} suffix={vs} /> : null}
+          footnote={phSites.length ? null : t.siteCard.notConnected}
+        />
+        <Stat
+          label={t.metrics.sitesOnline.label}
+          help={t.metrics.sitesOnline.help}
+          color="var(--c-health)"
+          value={
+            <span className={tot.down ? "text-destructive" : ""}>
+              {tot.up}
+              <span className="text-lg font-medium text-subtle"> / {tot.sites}</span>
+            </span>
+          }
+          footnote={tot.down ? s.someDown(tot.down) : s.allUp}
+        />
+        <Stat
+          label={t.metrics.issues.label}
+          help={t.metrics.issues.help}
+          color="var(--c-sentry)"
+          value={sentrySites.length ? f.num(tot.unresolved) : "—"}
+          footnote={sentrySites.length ? `${f.num(tot.events)} ${t.metrics.events.label.toLowerCase()}` : t.siteCard.notConnected}
+        />
+      </div>
 
-      <Alerts alerts={o.alerts} />
-    </>
+      <Section
+        title={t.home.sitesTitle}
+        right={
+          <Link href="/sites" className="btn btn-quiet btn-sm">
+            {t.home.manage} <ArrowRight className="h-4 w-4" />
+          </Link>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {sites.map((row) => (
+            <SiteCard key={row.id} row={row} alerts={o.alerts} />
+          ))}
+        </div>
+      </Section>
+
+      {gscSites.length ? (
+        <Card>
+          <CardHeader title={t.home.chartTitle} hint={t.home.chartHint} dot="var(--c-gsc)" />
+          <div className="px-3 pb-3">
+            <TimeSeriesChart dates={tot.clicksSeries.dates} series={[{ name: t.metrics.clicks.label, color: "var(--c-gsc)", values: tot.clicksSeries.values }]} height={240} />
+          </div>
+        </Card>
+      ) : null}
+
+      <Link href="/settings#agent" className="card group flex items-center gap-4 border-dashed p-5 transition-colors hover:bg-card-hover">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+          <Bot className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold">{t.home.askAgent}</span>
+          <span className="block text-[15px] text-muted-foreground">{t.home.askAgentExample}</span>
+        </span>
+        <ArrowRight className="h-5 w-5 shrink-0 text-subtle group-hover:text-foreground" aria-hidden />
+      </Link>
+    </div>
   );
 }

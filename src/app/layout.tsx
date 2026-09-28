@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { I18nProvider } from "@/i18n/client";
+import { getLocale, getTheme } from "@/i18n/server";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -11,11 +13,12 @@ export const metadata: Metadata = {
     "Open-source, MCP-native dashboard for all your sites — Search Console, PostHog, Sentry, uptime and domain SEO at a glance.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const [locale, theme] = await Promise.all([getLocale(), getTheme()]);
   return (
-    <html lang="en" className="dark">
-      <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background text-foreground antialiased`}>
-        {children}
+    <html lang={locale} data-theme={theme === "system" ? undefined : theme}>
+      <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background text-[15px] text-foreground antialiased`}>
+        <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>
   );

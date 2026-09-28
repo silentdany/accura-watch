@@ -8,6 +8,9 @@ import { deleteIntegration, saveIntegration, type ProviderId } from "@/lib/integ
 import { createApiToken, revokeApiToken } from "@/lib/api-tokens";
 import { errorMessage } from "@/lib/http";
 import { normalizePrivateKey } from "@/lib/google-key";
+import { cookies } from "next/headers";
+import { getI18n } from "@/i18n/server";
+import { isLocale, LOCALE_COOKIE, THEME_COOKIE } from "@/i18n";
 
 export type ActionState = { ok: boolean; message: string; token?: string } | null;
 
@@ -38,10 +41,11 @@ export async function syncNowAction(siteId?: string): Promise<ActionState> {
     const r = await runCollection({ siteIds: siteId ? [siteId] : undefined, force: true });
     const ran = r.results.filter((x) => x.status === "ok" || x.status === "error");
     const errors = ran.filter((x) => x.status === "error");
-    if (!ran.length) return "Nothing to sync — connect a provider or add sites.";
+    const { t, f } = await getI18n();
+    if (!ran.length) return t.sync.nothing;
     return errors.length
-      ? { ok: false, message: `${ran.length - errors.length}/${ran.length} ok · ${errors.map((e) => `${e.site}/${e.source}: ${e.detail}`).join(" · ")}` }
-      : `Synced ${ran.length} source${ran.length > 1 ? "s" : ""} in ${(r.durationMs / 1000).toFixed(1)} s`;
+      ? { ok: false, message: `${t.sync.done(ran.length - errors.length, ran.length)} · ${errors.map((e) => `${e.site}/${e.source}: ${e.detail}`).join(" · ")}` }
+      : t.sync.success(ran.length, f.dec(r.durationMs / 1000, 1));
   });
 }
 
@@ -52,7 +56,7 @@ export async function addSiteAction(_: ActionState, fd: FormData): Promise<Actio
     const site = await createSite({ domain: field(fd, "domain") ?? "", name: field(fd, "name") || undefined });
     // Kick a first health check + mapped sources so the dashboard isn't empty.
     await runCollection({ siteIds: [site.id], force: true }).catch(() => null);
-    return `Added ${site.domain}`;
+    return (await getI18n()).t.actions.added(site.domain);
   });
 }
 
@@ -69,7 +73,7 @@ export async function updateSiteAction(_: ActionState, fd: FormData): Promise<Ac
       active: fd.get("active") === "on",
       pinned: fd.get("pinned") === "on",
     });
-    return "Saved";
+    return (await getI18n()).t.actions.saved;
   });
 }
 
@@ -88,19 +92,21 @@ export async function togglePinAction(fd: FormData): Promise<void> {
 export async function importGscAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return attempt(async () => {
     const props = fd.getAll("property").map(String).filter(Boolean);
-    if (!props.length) return { ok: false, message: "Select at least one property" };
+    const { t } = await getI18n();
+    if (!props.length) return { ok: false, message: t.actions.selectOne };
     const r = await importFromGsc(props);
     if (r.created.length) {
       await runCollection({ siteIds: r.created.map((s) => s.id), sources: ["health"], force: true }).catch(() => null);
     }
-    return `Imported ${r.created.length} site${r.created.length === 1 ? "" : "s"}${r.skipped.length ? ` · ${r.skipped.length} already watched` : ""}. Data backfills on the next sync.`;
+    return t.actions.imported(r.created.length, r.skipped.length);
   });
 }
 
 export async function autoMatchAction(): Promise<ActionState> {
   return attempt(async () => {
     const n = await autoMatchSites();
-    return n ? `Mapped ${n} field${n > 1 ? "s" : ""}` : "Nothing new to match";
+    const { t } = await getI18n();
+    return n ? t.actions.matched(n) : t.actions.nothingToMatch;
   });
 }
 
@@ -109,31 +115,32 @@ export async function autoMatchAction(): Promise<ActionState> {
 export async function saveIntegrationAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return attempt(async () => {
     const provider = field(fd, "provider") as ProviderId;
+    const { t } = await getI18n();
     switch (provider) {
       case "google": {
         const json = field(fd, "serviceAccount");
-        if (!json) return { ok: false, message: "Paste the service account JSON key" };
+        if (!json) return { ok: false, message: t.actions.pasteJson };
         let parsed: { client_email?: string; private_key?: string };
         try {
           parsed = JSON.parse(json);
         } catch {
-          return { ok: false, message: "Invalid JSON" };
+          return { ok: false, message: t.actions.invalidJson };
         }
-        if (!parsed.client_email || !parsed.private_key) return { ok: false, message: "JSON must contain client_email and private_key" };
+        if (!parsed.client_email || !parsed.private_key) return { ok: false, message: t.actions.jsonFields };
         normalizePrivateKey(parsed.private_key); // throws a readable error if unusable
         await saveIntegration("google", { email: parsed.client_email }, {
           clientEmail: parsed.client_email,
           privateKey: parsed.private_key,
           refreshToken: null,
         });
-        return `Service account saved — add ${parsed.client_email} as a user on each Search Console property.`;
+        return t.actions.serviceAccountSaved(parsed.client_email);
       }
       case "posthog":
         await saveIntegration("posthog", { host: field(fd, "host") || "https://us.posthog.com" }, { apiKey: field(fd, "apiKey") });
-        return "PostHog saved";
+        return t.actions.providerSaved("PostHog");
       case "sentry":
         await saveIntegration("sentry", { org: field(fd, "org") || null, host: field(fd, "host") || "https://sentry.io" }, { token: field(fd, "token") });
-        return "Sentry saved";
+        return t.actions.providerSaved("Sentry");
       case "dataforseo":
         await saveIntegration(
           "dataforseo",
@@ -145,15 +152,15 @@ export async function saveIntegrationAction(_: ActionState, fd: FormData): Promi
           },
           { login: field(fd, "login"), password: field(fd, "password") },
         );
-        return "DataForSEO saved";
+        return t.actions.providerSaved("DataForSEO");
       case "ahrefs":
         await saveIntegration("ahrefs", {}, { apiKey: field(fd, "apiKey") });
-        return "Ahrefs saved";
+        return t.actions.providerSaved("Ahrefs");
       case "openpagerank":
         await saveIntegration("openpagerank", {}, { apiKey: field(fd, "apiKey") });
-        return "Open PageRank saved";
+        return t.actions.providerSaved("Open PageRank");
       default:
-        return { ok: false, message: "Unknown provider" };
+        return { ok: false, message: t.actions.unknownProvider };
     }
   });
 }
@@ -169,7 +176,7 @@ export async function disconnectIntegrationAction(fd: FormData): Promise<void> {
 export async function createTokenAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return attempt(async () => {
     const { token } = await createApiToken(field(fd, "name") || "MCP client");
-    return { ok: true, message: "Token created — copy it now, it won't be shown again.", token };
+    return { ok: true, message: (await getI18n()).t.settings.tokenCreated, token };
   });
 }
 
@@ -177,4 +184,22 @@ export async function revokeTokenAction(fd: FormData): Promise<void> {
   await guard();
   await revokeApiToken(String(fd.get("id")));
   revalidatePath("/settings");
+}
+
+// ─── Preferences ────────────────────────────────────────────────────────────
+
+const YEAR = 60 * 60 * 24 * 365;
+
+export async function setLocaleAction(fd: FormData): Promise<void> {
+  const v = String(fd.get("locale"));
+  if (isLocale(v)) (await cookies()).set(LOCALE_COOKIE, v, { path: "/", maxAge: YEAR, sameSite: "lax" });
+  revalidatePath("/", "layout");
+}
+
+export async function setThemeAction(fd: FormData): Promise<void> {
+  const v = String(fd.get("theme"));
+  const jar = await cookies();
+  if (v === "light" || v === "dark") jar.set(THEME_COOKIE, v, { path: "/", maxAge: YEAR, sameSite: "lax" });
+  else jar.delete(THEME_COOKIE);
+  revalidatePath("/", "layout");
 }

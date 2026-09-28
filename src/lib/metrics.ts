@@ -82,12 +82,18 @@ export type SiteRow = {
   sync: SyncInfo[];
 };
 
+export type AlertKind = "down" | "tls" | "uptime" | "clicksDrop" | "visitorsDrop" | "errorSpike" | "syncFailing";
+
 export type Alert = {
   severity: "critical" | "warning" | "info";
+  kind: AlertKind;
   site: string;
   siteName: string;
+  domain: string;
   source: string;
+  /** English message (MCP / API). The UI phrases `kind` + `data` in the user's language. */
   message: string;
+  data: { error?: string | null; days?: number; ratio?: number; change?: number; factor?: number | null; count?: number };
 };
 
 export type Overview = {
@@ -322,29 +328,35 @@ function buildRows({ sites, range, metrics, insights, checks, states }: BuildInp
 export function computeAlerts(rows: SiteRow[]): Alert[] {
   const out: Alert[] = [];
   for (const r of rows) {
-    const push = (severity: Alert["severity"], source: string, message: string) =>
-      out.push({ severity, site: r.slug, siteName: r.name, source, message });
+    const push = (severity: Alert["severity"], kind: AlertKind, source: string, message: string, data: Alert["data"] = {}) =>
+      out.push({ severity, kind, site: r.slug, siteName: r.name, domain: r.domain, source, message, data });
 
-    if (r.health.status === "down") push("critical", "health", `Site down${r.health.error ? ` — ${r.health.error}` : ""}`);
+    if (r.health.status === "down") push("critical", "down", "health", `Site down${r.health.error ? ` — ${r.health.error}` : ""}`, { error: r.health.error });
     if (r.health.sslDaysLeft != null && r.health.sslDaysLeft < 14) {
-      push(r.health.sslDaysLeft < 3 ? "critical" : "warning", "health", `TLS certificate expires in ${r.health.sslDaysLeft} days`);
+      push(r.health.sslDaysLeft < 3 ? "critical" : "warning", "tls", "health", `TLS certificate expires in ${r.health.sslDaysLeft} days`, {
+        days: r.health.sslDaysLeft,
+      });
     }
     if (r.health.uptime != null && r.health.uptime < 0.99 && r.health.status !== "down") {
-      push("warning", "health", `Uptime ${(r.health.uptime * 100).toFixed(1)}% over the period`);
+      push("warning", "uptime", "health", `Uptime ${(r.health.uptime * 100).toFixed(1)}% over the period`, { ratio: r.health.uptime });
     }
     if (r.gsc && r.gsc.clicksPrev >= 50) {
       const d = pctChange(r.gsc.clicks, r.gsc.clicksPrev);
-      if (d != null && d <= -0.3) push("warning", "gsc", `Search clicks ${Math.round(d * 100)}% vs previous period`);
+      if (d != null && d <= -0.3) push("warning", "clicksDrop", "gsc", `Search clicks ${Math.round(d * 100)}% vs previous period`, { change: d });
     }
     if (r.posthog && r.posthog.visitorsPrev >= 100) {
       const d = pctChange(r.posthog.visitors, r.posthog.visitorsPrev);
-      if (d != null && d <= -0.4) push("warning", "posthog", `Visitors ${Math.round(d * 100)}% vs previous period`);
+      if (d != null && d <= -0.4) push("warning", "visitorsDrop", "posthog", `Visitors ${Math.round(d * 100)}% vs previous period`, { change: d });
     }
     if (r.sentry && r.sentry.events >= 20 && r.sentry.events > r.sentry.eventsPrev * 3) {
-      push("warning", "sentry", `Error events ×${r.sentry.eventsPrev ? (r.sentry.events / r.sentry.eventsPrev).toFixed(1) : "∞"} (${r.sentry.events})`);
+      const factor = r.sentry.eventsPrev ? r.sentry.events / r.sentry.eventsPrev : null;
+      push("warning", "errorSpike", "sentry", `Error events ×${factor ? factor.toFixed(1) : "∞"} (${r.sentry.events})`, {
+        factor,
+        count: r.sentry.events,
+      });
     }
     for (const s of r.sync) {
-      if (!s.ok && s.source !== "health") push("info", s.source, `Sync failing: ${s.error ?? "unknown error"}`);
+      if (!s.ok && s.source !== "health") push("info", "syncFailing", s.source, `Sync failing: ${s.error ?? "unknown error"}`, { error: s.error });
     }
   }
   const rank = { critical: 0, warning: 1, info: 2 };

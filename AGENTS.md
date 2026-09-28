@@ -23,6 +23,8 @@ npx prisma db push    # sync schema to the database
 
 - Server actions live in `src/app/actions.ts`, are guarded by a session check, and return `ActionState`.
 - Tool inputs are zod schemas converted with `z.toJSONSchema`. Tool errors are returned in-band (`isError: true`).
-- Charts are hand-rolled SVG (`components/chart.tsx`, `components/sparkline.tsx`). Keep one color per source (`--c-gsc`, `--c-posthog`, `--c-sentry`, `--c-health`, `--c-seo`) and never use a dual y-axis: to overlay two measures of different scale, use `TimeSeriesChart indexed` (each series as % of its own average, raw values in the tooltip).
+- UI text lives in `src/i18n/fr.ts` (reference) and `src/i18n/en.ts` (same shape, type-checked). Server components use `getI18n()`, client components `useI18n()`; both return `t` (messages) and `f` (locale-aware number/date formatting). Write for non-experts: plain words, and every metric gets a `help` explanation shown behind a "?".
+- Theme: light by default, dark via `prefers-color-scheme` or the `aw_theme` cookie (`data-theme` on `<html>`). Colors are tokens in `globals.css`; status colors (`good`, `warning`, `destructive`, `info`) always come with an icon or a word.
+- Charts are hand-rolled SVG (`components/chart.tsx`, `components/sparkline.tsx`). Keep one color per source (`--c-gsc`, `--c-posthog`, `--c-sentry`, `--c-health`, `--c-seo`); a second series in the same chart is a neutral dashed companion (`--c-companion`, `dashed: true`), never a second hue, and never use a dual y-axis: to overlay two measures of different scale, use `TimeSeriesChart indexed` (each series as % of its own average, raw values in the tooltip).
 - Cross-source stats (ratios, correlations, joins between providers) live in `lib/insights.ts`, exposed as `get_site_insights`.
 - Daily metrics use the `DailyMetric` table (`siteId, source, key, date`); rich payloads use `Insight` (`siteId, source, kind`).

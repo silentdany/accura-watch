@@ -1,133 +1,115 @@
 "use client";
 
 import { createTokenAction, disconnectIntegrationAction, saveIntegrationAction } from "@/app/actions";
+import { useI18n } from "@/i18n/client";
 import { ActionForm, CopyField, Feedback, SubmitButton } from "./forms";
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: React.ReactNode }) {
+function Field({ label, children, hint, wide }: { label: string; children: React.ReactNode; hint?: React.ReactNode; wide?: boolean }) {
   return (
-    <label className="block">
+    <label className={`block ${wide ? "sm:col-span-2" : ""}`}>
       <span className="label">{label}</span>
       {children}
-      {hint ? <span className="mt-1 block text-[11px] text-subtle">{hint}</span> : null}
+      {hint ? <span className="mt-1.5 block text-[13px] text-muted-foreground">{hint}</span> : null}
     </label>
   );
 }
 
-function Footer({ pending, state, connected, provider }: { pending: boolean; state: Parameters<typeof Feedback>[0]["state"]; connected: boolean; provider: string }) {
-  return (
-    <div className="mt-auto flex flex-wrap items-center justify-end gap-3 pt-1">
-      <Feedback state={state} />
-      {connected ? (
-        <button
-          type="submit"
-          formAction={disconnectIntegrationAction}
-          formNoValidate
-          className="btn btn-danger"
-          onClick={(e) => {
-            if (!confirm(`Disconnect ${provider}? Stored credentials will be deleted.`)) e.preventDefault();
-          }}
-        >
-          Disconnect
-        </button>
-      ) : null}
-      <SubmitButton pending={pending}>{connected ? "Update" : "Connect"}</SubmitButton>
-    </div>
-  );
-}
+export type ProviderId = "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank" | "ahrefs";
 
-const keep = (connected: boolean) => (connected ? "•••••••• (leave blank to keep)" : "");
-
-export function IntegrationForm({
-  provider,
-  connected,
-  config,
-}: {
-  provider: "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank" | "ahrefs";
-  connected: boolean;
-  config: Record<string, unknown>;
-}) {
+export function IntegrationForm({ provider, name, connected, config }: { provider: ProviderId; name: string; connected: boolean; config: Record<string, unknown> }) {
+  const { t } = useI18n();
+  const s = t.settings;
+  const fl = s.fields;
   const c = (k: string, d = "") => (config[k] == null ? d : String(config[k]));
+  const keep = connected ? s.keep : "";
   return (
-    <ActionForm action={saveIntegrationAction} className="flex flex-1 flex-col gap-3">
+    <ActionForm action={saveIntegrationAction} className="flex flex-1 flex-col gap-4">
       {(pending, state) => (
         <>
           <input type="hidden" name="provider" value={provider} />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {provider === "google" ? (
-            <div className="sm:col-span-2">
-              <Field
-                label="Service account JSON key"
-                hint="Alternative to OAuth: create a service account in Google Cloud, enable the Search Console API, then add the service account email as a (restricted) user on each property."
-              >
-                <textarea name="serviceAccount" rows={3} placeholder='{"type": "service_account", "client_email": "...", "private_key": "..."}' className="input font-mono text-xs" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {provider === "google" ? (
+              <Field label={fl.serviceAccount} wide>
+                <textarea name="serviceAccount" rows={3} placeholder='{"type": "service_account", "client_email": "…", "private_key": "…"}' className="input font-mono text-[13px]" />
               </Field>
-            </div>
-          ) : null}
-          {provider === "posthog" ? (
-            <>
-              <Field label="Personal API key" hint="PostHog → Settings → Personal API keys. Scopes: project:read, query:read.">
-                <input name="apiKey" type="password" placeholder={keep(connected) || "phx_..."} required={!connected} className="input" autoComplete="off" />
+            ) : null}
+            {provider === "posthog" ? (
+              <>
+                <Field label={fl.personalApiKey}>
+                  <input name="apiKey" type="password" placeholder={keep || "phx_…"} required={!connected} className="input" autoComplete="off" />
+                </Field>
+                <Field label={fl.host}>
+                  <select name="host" defaultValue={c("host", "https://us.posthog.com")} className="input">
+                    <option value="https://us.posthog.com">US Cloud (us.posthog.com)</option>
+                    <option value="https://eu.posthog.com">EU Cloud (eu.posthog.com)</option>
+                  </select>
+                </Field>
+              </>
+            ) : null}
+            {provider === "sentry" ? (
+              <>
+                <Field label={fl.authToken} wide>
+                  <input name="token" type="password" placeholder={keep || "sntryu_…"} required={!connected} className="input" autoComplete="off" />
+                </Field>
+                <Field label={fl.org} hint={fl.orgHint}>
+                  <input name="org" defaultValue={c("org")} placeholder="my-org" className="input" />
+                </Field>
+                <Field label={fl.sentryHost} hint={fl.sentryHostHint}>
+                  <input name="host" defaultValue={c("host", "https://sentry.io")} className="input" />
+                </Field>
+              </>
+            ) : null}
+            {provider === "dataforseo" ? (
+              <>
+                <Field label={fl.login}>
+                  <input name="login" type="text" placeholder={keep || "you@example.com"} required={!connected} className="input" autoComplete="off" />
+                </Field>
+                <Field label={fl.password}>
+                  <input name="password" type="password" placeholder={keep} required={!connected} className="input" autoComplete="off" />
+                </Field>
+                <Field label={fl.location} hint={fl.locationHint}>
+                  <input name="locationCode" type="number" defaultValue={c("locationCode", "2250")} className="input" />
+                </Field>
+                <Field label={fl.language} hint={fl.languageHint}>
+                  <input name="languageCode" defaultValue={c("languageCode", "fr")} className="input" />
+                </Field>
+                <Field label={fl.cadence} hint={fl.cadenceHint}>
+                  <input name="cadenceDays" type="number" min={1} defaultValue={c("cadenceDays", "7")} className="input" />
+                </Field>
+                <label className="flex items-center gap-2.5 self-center text-sm">
+                  <input
+                    type="checkbox"
+                    name="backlinks"
+                    defaultChecked={config.backlinks === undefined ? true : Boolean(config.backlinks)}
+                    className="h-4 w-4 accent-[hsl(var(--primary))]"
+                  />
+                  {fl.backlinks}
+                </label>
+              </>
+            ) : null}
+            {provider === "ahrefs" || provider === "openpagerank" ? (
+              <Field label={fl.apiKey} wide>
+                <input name="apiKey" type="password" placeholder={keep} required={!connected} className="input" autoComplete="off" />
               </Field>
-              <Field label="Host">
-                <select name="host" defaultValue={c("host", "https://us.posthog.com")} className="input">
-                  <option value="https://us.posthog.com">US Cloud (us.posthog.com)</option>
-                  <option value="https://eu.posthog.com">EU Cloud (eu.posthog.com)</option>
-                </select>
-              </Field>
-            </>
-          ) : null}
-          {provider === "sentry" ? (
-            <>
-              <Field label="Auth token" hint="User Auth Token (Settings → Account → Personal Tokens) with org:read, project:read, event:read. Organization tokens (sntrys_) can't read issues.">
-                <input name="token" type="password" placeholder={keep(connected) || "sntrys_..."} required={!connected} className="input" autoComplete="off" />
-              </Field>
-              <Field label="Organization slug" hint="Leave empty to use the token's first organization.">
-                <input name="org" defaultValue={c("org")} placeholder="my-org" className="input" />
-              </Field>
-              <Field label="Host" hint="https://de.sentry.io for EU data residency, or your self-hosted URL.">
-                <input name="host" defaultValue={c("host", "https://sentry.io")} className="input" />
-              </Field>
-            </>
-          ) : null}
-          {provider === "dataforseo" ? (
-            <>
-              <Field label="API login" hint="app.dataforseo.com → API Access. Pay-as-you-go, no subscription.">
-                <input name="login" type="text" placeholder={keep(connected) || "you@example.com"} required={!connected} className="input" autoComplete="off" />
-              </Field>
-              <Field label="API password">
-                <input name="password" type="password" placeholder={keep(connected)} required={!connected} className="input" autoComplete="off" />
-              </Field>
-              <Field label="Location code" hint="2840 = US, 2250 = France, 2826 = UK, 2276 = Germany">
-                <input name="locationCode" type="number" defaultValue={c("locationCode", "2840")} className="input" />
-              </Field>
-              <Field label="Language code" hint="Must match the location: fr for France, de for Germany, en for US/UK.">
-                <input name="languageCode" defaultValue={c("languageCode", "en")} className="input" />
-              </Field>
-              <Field label="Refresh every (days)" hint="Domain overview. Backlink history & keyword metrics refresh weekly, ranking history & competitors monthly: ≈ $0.10 per site per week in total.">
-                <input name="cadenceDays" type="number" min={1} defaultValue={c("cadenceDays", "7")} className="input" />
-              </Field>
-              <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                <input type="checkbox" name="backlinks" defaultChecked={config.backlinks === undefined ? true : Boolean(config.backlinks)} className="accent-[hsl(var(--primary))]" />
-                Include Backlinks API (rank, referring domains)
-              </label>
-            </>
-          ) : null}
-          {provider === "ahrefs" ? (
-            <div className="sm:col-span-2">
-              <Field label="Free API key" hint="Ahrefs free APIv3 key — Domain Rating via /v3/public/domain-rating-free, no API units used.">
-                <input name="apiKey" type="password" placeholder={keep(connected)} required={!connected} className="input" autoComplete="off" />
-              </Field>
-            </div>
-          ) : null}
-          {provider === "openpagerank" ? (
-            <div className="sm:col-span-2">
-              <Field label="API key" hint="Free at domcop.com/openpagerank — 0–10 authority score for every domain.">
-                <input name="apiKey" type="password" placeholder={keep(connected)} required={!connected} className="input" autoComplete="off" />
-              </Field>
-            </div>
-          ) : null}
+            ) : null}
           </div>
-          <Footer pending={pending} state={state} connected={connected} provider={provider} />
+          <div className="mt-auto flex flex-wrap items-center justify-end gap-3 pt-2">
+            <Feedback state={state} />
+            {connected ? (
+              <button
+                type="submit"
+                formAction={disconnectIntegrationAction}
+                formNoValidate
+                className="btn btn-danger"
+                onClick={(e) => {
+                  if (!confirm(s.confirmDisconnect(name))) e.preventDefault();
+                }}
+              >
+                {t.common.disconnect}
+              </button>
+            ) : null}
+            <SubmitButton pending={pending}>{connected ? t.common.update : t.common.connect}</SubmitButton>
+          </div>
         </>
       )}
     </ActionForm>
@@ -135,24 +117,26 @@ export function IntegrationForm({
 }
 
 export function CreateTokenForm({ mcpUrl }: { mcpUrl: string }) {
+  const { t } = useI18n();
+  const s = t.settings;
   return (
     <ActionForm action={createTokenAction} className="flex flex-col gap-3">
       {(pending, state) => (
         <>
           <div className="flex flex-wrap items-end gap-3">
             <label className="block min-w-48 flex-1">
-              <span className="label">Token name</span>
-              <input name="name" placeholder="Claude Code on my laptop" className="input" />
+              <span className="label">{s.tokenName}</span>
+              <input name="name" placeholder={s.tokenPlaceholder} className="input" />
             </label>
-            <SubmitButton pending={pending}>Create token</SubmitButton>
+            <SubmitButton pending={pending}>{s.createToken}</SubmitButton>
           </div>
           {state?.token ? (
-            <div className="flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3">
-              <p className="text-xs text-primary">{state.message}</p>
+            <div className="flex flex-col gap-2 rounded-xl border border-good/30 bg-good-soft p-4">
+              <p className="text-sm font-medium text-good">{state.message}</p>
               <CopyField value={state.token} />
-              <p className="mt-1 text-[11px] text-muted-foreground">Claude Code:</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">{s.claudeCode}</p>
               <CopyField value={`claude mcp add --transport http accura-watch ${mcpUrl} --header "Authorization: Bearer ${state.token}"`} />
-              <p className="mt-1 text-[11px] text-muted-foreground">Clients without custom headers (URL-embedded key — keep it private):</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">{s.urlKey}</p>
               <CopyField value={`${mcpUrl}?key=${state.token}`} />
             </div>
           ) : (

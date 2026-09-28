@@ -1,9 +1,10 @@
 import { Shell } from "@/components/shell";
 import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/prisma";
+import { getTheme } from "@/i18n/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession();
+  const [session, theme] = await Promise.all([requireSession(), getTheme()]);
   const sites = await prisma.site.findMany({
     where: { active: true },
     orderBy: [{ pinned: "desc" }, { name: "asc" }],
@@ -11,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   });
   return (
     <Shell
+      theme={theme}
       userEmail={session.user.email}
       sites={sites.map((s) => ({
         slug: s.slug,

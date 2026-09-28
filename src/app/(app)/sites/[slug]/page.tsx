@@ -3,19 +3,25 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ExternalLink, Settings2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { loadSiteReport, type SiteReport, type TopQueryRow } from "@/lib/metrics";
-import { ago, parseRange } from "@/lib/dates";
-import { fmtMs, fmtNum, fmtPct, fmtPos } from "@/lib/format";
-import { Card, CardHeader, Delta, Empty, Favicon, PageHeader, Pill, StatusDot } from "@/components/ui";
-import { KpiTile } from "@/components/kpi";
+import { loadSiteReport } from "@/lib/metrics";
+import { loadSiteInsights } from "@/lib/insights";
+import { parseRange } from "@/lib/dates";
+import { siteVerdict, VERDICT_TONE } from "@/lib/verdict";
+import { getI18n } from "@/i18n/server";
+import { Badge, Favicon, PageHeader, StatusBadge } from "@/components/ui";
 import { RangeTabs } from "@/components/range-tabs";
 import { SyncButton } from "@/components/forms";
-import { Legend, TimeSeriesChart } from "@/components/chart";
-import { loadSiteInsights } from "@/lib/insights";
-import { AuthorityGlance, CompetitorsCard, ContentGapsCard, CorrelationsCard, InsightTiles, OpportunitiesCard, PagesJoinCard } from "@/components/insights";
+import { SummaryTab } from "@/components/site/summary-tab";
+import { GoogleTab } from "@/components/site/google-tab";
+import { VisitorsTab } from "@/components/site/visitors-tab";
+import { HealthTab } from "@/components/site/health-tab";
+import { SeoTab } from "@/components/site/seo-tab";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+const TABS = ["summary", "google", "visitors", "health", "seo"] as const;
+type Tab = (typeof TABS)[number];
 
 type Params = { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[]>> };
 
@@ -24,462 +30,73 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return { title: site?.name ?? "Site" };
 }
 
-const nn = (v: number[]) => v.map((x) => (Number.isFinite(x) ? x : null));
-
-function NotMapped({ what, slug }: { what: string; slug: string }) {
-  return (
-    <Empty>
-      No {what} mapped.{" "}
-      <Link href={`/sites#${slug}`} className="text-primary hover:underline">
-        Configure
-      </Link>
-    </Empty>
-  );
-}
-
-function Waiting({ source }: { source: string }) {
-  return <Empty>Waiting for the first {source} sync — hit “Sync now”.</Empty>;
-}
-
-function TopTable({ rows, keyLabel, isUrl }: { rows: TopQueryRow[]; keyLabel: string; isUrl?: boolean }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[480px] text-sm">
-        <thead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-          <tr className="border-b border-border">
-            <th className="px-4 py-2 text-left font-medium">{keyLabel}</th>
-            <th className="px-3 py-2 text-right font-medium">Clicks</th>
-            <th className="px-3 py-2 text-right font-medium">Impr.</th>
-            <th className="px-3 py-2 text-right font-medium">CTR</th>
-            <th className="px-4 py-2 text-right font-medium">Pos.</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.slice(0, 15).map((r) => {
-            const label = isUrl ? r.key.replace(/^https?:\/\/[^/]+/, "") || "/" : r.key;
-            return (
-              <tr key={r.key} className="border-b border-border/60 last:border-0 hover:bg-card-hover">
-                <td className="max-w-[280px] truncate px-4 py-2" title={r.key}>
-                  {label}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <span className="tabular font-medium">{fmtNum(r.clicks)}</span>{" "}
-                  <Delta cur={r.clicks} prev={r.prevClicks} />
-                </td>
-                <td className="tabular px-3 py-2 text-right text-muted-foreground">{fmtNum(r.impressions)}</td>
-                <td className="tabular px-3 py-2 text-right text-muted-foreground">{fmtPct(r.ctr)}</td>
-                <td className="px-4 py-2 text-right">
-                  <span className="tabular">{fmtPos(r.position)}</span>{" "}
-                  <Delta cur={r.position} prev={r.prevPosition} invert mode="abs" />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function SimpleTable({ rows, cols }: { rows: Record<string, string | number>[]; cols: { key: string; label: string; num?: boolean }[] }) {
-  return (
-    <table className="w-full text-sm">
-      <thead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-        <tr className="border-b border-border">
-          {cols.map((c, i) => (
-            <th key={c.key} className={`py-2 font-medium ${c.num ? "text-right" : "text-left"} ${i === 0 ? "pl-4" : "px-3"} ${i === cols.length - 1 ? "pr-4" : ""}`}>
-              {c.label}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, ri) => (
-          <tr key={ri} className="border-b border-border/60 last:border-0 hover:bg-card-hover">
-            {cols.map((c, i) => (
-              <td
-                key={c.key}
-                className={`py-2 ${c.num ? "tabular text-right" : "max-w-[260px] truncate"} ${i === 0 ? "pl-4" : "px-3"} ${i === cols.length - 1 ? "pr-4" : ""}`}
-                title={String(r[c.key])}
-              >
-                {c.num ? fmtNum(Number(r[c.key])) : String(r[c.key])}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function SeoCard({ r }: { r: SiteReport }) {
-  const detail = r.seoDetail as {
-    organic?: { keywords: number; etv: number; top3: number; top10: number; trafficCost: number } | null;
-    backlinks?: { rank: number; backlinks: number; referringDomains: number; referringMainDomains: number; spamScore: number | null; brokenBacklinks: number | null } | null;
-    openPageRank?: { score: number; globalRank: number | null } | null;
-    ahrefs?: { domainRating: number } | null;
-    errors?: string[];
-  } | null;
-  const items: { label: string; value: string; delta?: React.ReactNode }[] = [];
-  if (detail?.ahrefs) {
-    items.push({
-      label: "Ahrefs DR",
-      value: String(Math.round(detail.ahrefs.domainRating)),
-      delta: <Delta cur={r.seo?.ahrefsDr} prev={r.seo?.ahrefsDrPrev} mode="abs" />,
-    });
-  }
-  if (detail?.backlinks) {
-    items.push(
-      { label: "Domain rank", value: String(Math.round(detail.backlinks.rank)), delta: <Delta cur={r.seo?.rank} prev={r.seo?.rankPrev} mode="abs" /> },
-      { label: "Referring domains", value: fmtNum(detail.backlinks.referringDomains), delta: <Delta cur={r.seo?.referringDomains} prev={r.seo?.referringDomainsPrev} /> },
-      { label: "Backlinks", value: fmtNum(detail.backlinks.backlinks) },
-    );
-    if (detail.backlinks.spamScore != null) items.push({ label: "Spam score", value: String(detail.backlinks.spamScore) });
-  }
-  if (detail?.organic) {
-    items.push(
-      { label: "Organic keywords", value: fmtNum(detail.organic.keywords), delta: <Delta cur={r.seo?.organicKeywords} prev={r.seo?.organicKeywordsPrev} /> },
-      { label: "Top 10 keywords", value: fmtNum(detail.organic.top10) },
-      { label: "Est. organic traffic", value: fmtNum(detail.organic.etv) },
-      { label: "Traffic value", value: `$${fmtNum(detail.organic.trafficCost)}` },
-    );
-  }
-  if (detail?.openPageRank) {
-    items.push({ label: "Open PageRank", value: detail.openPageRank.score.toFixed(2) });
-    if (detail.openPageRank.globalRank) items.push({ label: "Global rank", value: `#${fmtNum(detail.openPageRank.globalRank)}` });
-  }
-  return (
-    <Card id="seo" className="mb-6 scroll-mt-20">
-      <CardHeader
-        title="Domain SEO"
-        dot="var(--c-seo)"
-        hint={`${detail?.ahrefs ? "Domain Rating by Ahrefs · " : ""}DataForSEO / Open PageRank${r.seo?.collectedAt ? ` · updated ${ago(r.seo.collectedAt)}` : ""}`}
-      />
-      {items.length ? (
-        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-          {[...items, ...Array.from({ length: (4 - (items.length % 4)) % 4 }, () => null)].map((i, idx) =>
-            i === null ? (
-              <div key={`pad-${idx}`} className="hidden bg-card sm:block" />
-            ) : (
-            <div key={i.label} className="bg-card px-4 py-3">
-              <p className="text-[11px] text-muted-foreground">{i.label}</p>
-              <p className="tabular mt-1 flex items-baseline gap-2 text-lg font-semibold">
-                {i.value} {i.delta}
-              </p>
-            </div>
-            ),
-          )}
-        </div>
-      ) : (
-        <Empty>
-          No SEO data yet.{" "}
-          <Link href="/settings#dataforseo" className="text-primary hover:underline">
-            Connect DataForSEO, Open PageRank or Ahrefs
-          </Link>
-        </Empty>
-      )}
-      {detail?.errors?.length ? <p className="border-t border-border px-4 py-2 text-xs text-warning">{detail.errors.join(" · ")}</p> : null}
-    </Card>
-  );
-}
-
 export default async function SitePage({ params, searchParams }: Params) {
   const { slug } = await params;
-  const range = parseRange((await searchParams).range);
+  const sp = await searchParams;
+  const range = parseRange(sp.range);
+  const tabParam = String(Array.isArray(sp.tab) ? sp.tab[0] : (sp.tab ?? "summary"));
+  const tab: Tab = (TABS as readonly string[]).includes(tabParam) ? (tabParam as Tab) : "summary";
+
   const site = await prisma.site.findUnique({ where: { slug } });
   if (!site) notFound();
-  const [r, insights] = await Promise.all([loadSiteReport(site, range), loadSiteInsights(site, range)]);
-
-  const syncErr = (source: string) => r.sync.find((s) => s.source === source && !s.ok)?.error;
+  const [{ t }, r, i] = await Promise.all([getI18n(), loadSiteReport(site, range), loadSiteInsights(site, range)]);
+  const syncErr = (source: string) => r.sync.find((s) => s.source === source && !s.ok)?.error ?? null;
+  const verdict = siteVerdict(r, r.alerts);
 
   return (
     <>
       <PageHeader
         title={
           <span className="flex items-center gap-3">
-            <Favicon domain={r.domain} size={26} />
-            {r.name}
-            <StatusDot status={r.health.status} />
+            <Favicon domain={r.domain} size={36} />
+            <span className="min-w-0 truncate">{r.name}</span>
           </span>
         }
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">
-              {r.domain} <ExternalLink className="h-3 w-3" />
+              {r.domain} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             </a>
-            {r.config.gscProperty ? <Pill>GSC · {r.config.gscProperty}</Pill> : null}
-            {r.config.posthogProjectId ? <Pill>PostHog · {r.config.posthogProjectId}</Pill> : null}
-            {r.config.sentryProject ? <Pill>Sentry · {r.config.sentryProject}</Pill> : null}
-            {!r.config.active ? <Pill tone="warn">paused</Pill> : null}
+            <StatusBadge status={r.health.status} />
+            {verdict !== "down" ? <Badge tone={VERDICT_TONE[verdict]}>{t.verdict[verdict]}</Badge> : null}
+            {!r.config.active ? <Badge tone="warning">{t.status.paused}</Badge> : null}
           </span>
         }
         right={
           <>
-            <RangeTabs value={range} basePath={`/sites/${slug}`} />
+            <RangeTabs value={range} basePath={`/sites/${slug}`} query={{ tab }} />
             <SyncButton siteId={r.id} />
-            <Link href={`/sites#${slug}`} className="btn btn-ghost" aria-label="Configure">
-              <Settings2 className="h-3.5 w-3.5" />
+            <Link href={`/sites#${slug}`} className="btn btn-ghost px-2.5" aria-label={t.site.configure} title={t.site.configure}>
+              <Settings2 className="h-4 w-4" />
             </Link>
           </>
         }
       />
 
-      {r.alerts.length ? (
-        <div className="mb-6 flex flex-col gap-2">
-          {r.alerts.map((a, i) => (
-            <div
-              key={i}
-              className={`rounded-md border px-3 py-2 text-sm ${
-                a.severity === "critical"
-                  ? "border-destructive/40 bg-destructive/10 text-destructive"
-                  : a.severity === "warning"
-                    ? "border-warning/30 bg-warning/10 text-warning"
-                    : "border-border bg-card text-muted-foreground"
-              }`}
-            >
-              <span className="mr-2 text-[10px] uppercase tracking-wider opacity-80">{a.source}</span>
-              {a.message}
-            </div>
+      <nav className="-mx-4 mb-8 overflow-x-auto border-b border-border px-4 sm:mx-0 sm:px-0" aria-label={t.nav.sites}>
+        <ul className="flex min-w-max gap-1">
+          {TABS.map((k) => (
+            <li key={k}>
+              <Link
+                href={{ pathname: `/sites/${slug}`, query: { tab: k, range } }}
+                scroll={false}
+                aria-current={k === tab ? "page" : undefined}
+                className={`-mb-px inline-flex border-b-2 px-3 py-2.5 text-[15px] font-medium transition-colors ${
+                  k === tab ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.site.tabs[k]}
+              </Link>
+            </li>
           ))}
-        </div>
-      ) : null}
+        </ul>
+      </nav>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-        <KpiTile label="Clicks" color="var(--c-gsc)" value={fmtNum(r.gsc?.clicks)} delta={r.gsc ? <Delta cur={r.gsc.clicks} prev={r.gsc.clicksPrev} /> : undefined} />
-        <KpiTile label="Impressions" color="var(--c-gsc-2)" value={fmtNum(r.gsc?.impressions)} delta={r.gsc ? <Delta cur={r.gsc.impressions} prev={r.gsc.impressionsPrev} /> : undefined} />
-        <KpiTile label="CTR" color="var(--c-gsc)" value={r.gsc ? fmtPct(r.gsc.ctr, 2) : "—"} delta={r.gsc ? <Delta cur={r.gsc.ctr} prev={r.gsc.ctrPrev} /> : undefined} />
-        <KpiTile label="Position" color="var(--c-gsc)" value={fmtPos(r.gsc?.position)} delta={r.gsc ? <Delta cur={r.gsc.position} prev={r.gsc.positionPrev} invert mode="abs" /> : undefined} />
-        <KpiTile label="Visitors" color="var(--c-posthog)" value={fmtNum(r.posthog?.visitors)} delta={r.posthog ? <Delta cur={r.posthog.visitors} prev={r.posthog.visitorsPrev} /> : undefined} />
-        <KpiTile label="Pageviews" color="var(--c-posthog)" value={fmtNum(r.posthog?.pageviews)} delta={r.posthog ? <Delta cur={r.posthog.pageviews} prev={r.posthog.pageviewsPrev} /> : undefined} />
-        <KpiTile
-          label="Uptime"
-          color="var(--c-health)"
-          value={r.health.uptime != null ? fmtPct(r.health.uptime, 2) : "—"}
-          hint={`${fmtMs(r.health.latencyMs)}${r.health.sslDaysLeft != null ? ` · TLS ${r.health.sslDaysLeft}d` : ""}`}
-        />
-        <KpiTile
-          label="Open issues"
-          color="var(--c-sentry)"
-          value={fmtNum(r.sentry?.unresolved)}
-          hint={r.sentry ? `${fmtNum(r.sentry.events)} events` : undefined}
-          delta={r.sentry ? <Delta cur={r.sentry.events} prev={r.sentry.eventsPrev} invert /> : undefined}
-        />
-      </div>
-
-      {/* Cross-source insights */}
-      <h2 className="eyebrow mb-3 mt-8">Insights</h2>
-      <InsightTiles i={insights} />
-      <div className="mb-6 grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <CorrelationsCard i={insights} />
-        <OpportunitiesCard i={insights} />
-        <div className="min-w-0 xl:col-span-2">
-          <PagesJoinCard i={insights} />
-        </div>
-        <CompetitorsCard i={insights} />
-        <ContentGapsCard i={insights} />
-      </div>
-
-      {/* Search & SEO */}
-      <h2 className="eyebrow mb-3 mt-8">Search &amp; SEO</h2>
-      {!r.config.gscProperty ? (
-        <Card className="mb-6">
-          <NotMapped what="Search Console property" slug={slug} />
-        </Card>
-      ) : !r.gsc ? (
-        <Card className="mb-6">{syncErr("gsc") ? <Empty>Sync error: {syncErr("gsc")}</Empty> : <Waiting source="Search Console" />}</Card>
-      ) : (
-        <>
-          <div className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-            <Card className="min-w-0 lg:col-span-2">
-              <CardHeader
-                title="Clicks & impressions"
-                hint={`Daily · through ${r.gsc.endDate} · each indexed to its own average (100 = average day)`}
-                right={
-                  <Legend
-                    items={[
-                      { name: "Clicks", color: "var(--c-gsc)" },
-                      { name: "Impressions", color: "var(--c-gsc-2)" },
-                    ]}
-                  />
-                }
-              />
-              <div className="p-3">
-                <TimeSeriesChart
-                  dates={r.gsc.clicksSeries.dates}
-                  series={[
-                    { name: "Clicks", color: "var(--c-gsc)", values: r.gsc.clicksSeries.values },
-                    { name: "Impressions", color: "var(--c-gsc-2)", values: r.gsc.impressionsSeries.values },
-                  ]}
-                  extra={[
-                    {
-                      name: "CTR",
-                      format: "pct",
-                      values: r.gsc.clicksSeries.values.map((c, i) => (r.gsc!.impressionsSeries.values[i] ? c / r.gsc!.impressionsSeries.values[i] : null)),
-                    },
-                  ]}
-                  indexed
-                  height={330}
-                />
-              </div>
-            </Card>
-            <div className="flex min-w-0 flex-col gap-3">
-              <AuthorityGlance i={insights} />
-              <Card>
-                <CardHeader title="Average position" dot="var(--c-gsc)" hint="Lower is better" />
-                <div className="p-3">
-                  <TimeSeriesChart
-                    dates={r.gsc.positionSeries.dates}
-                    series={[{ name: "Position", color: "var(--c-gsc)", values: nn(r.gsc.positionSeries.values) }]}
-                    height={82}
-                    kind="line"
-                    invertY
-                    format="position"
-                  />
-                </div>
-              </Card>
-            </div>
-          </div>
-          <div className="mb-6 grid grid-cols-1 gap-3 xl:grid-cols-2">
-            <Card>
-              <CardHeader title="Top queries" hint={r.gscTopQueries ? `${r.gscTopQueries.startDate} → ${r.gscTopQueries.endDate} · vs previous 28 days` : undefined} />
-              {r.gscTopQueries?.rows.length ? <TopTable rows={r.gscTopQueries.rows} keyLabel="Query" /> : <Empty>No queries yet.</Empty>}
-            </Card>
-            <Card>
-              <CardHeader title="Top pages" hint={r.gscTopPages ? `${r.gscTopPages.startDate} → ${r.gscTopPages.endDate}` : undefined} />
-              {r.gscTopPages?.rows.length ? <TopTable rows={r.gscTopPages.rows} keyLabel="Page" isUrl /> : <Empty>No pages yet.</Empty>}
-            </Card>
-          </div>
-        </>
-      )}
-      <SeoCard r={r} />
-
-      {/* Analytics */}
-      <h2 className="eyebrow mb-3 mt-8">Analytics</h2>
-      {!r.config.posthogProjectId ? (
-        <Card className="mb-6">
-          <NotMapped what="PostHog project" slug={slug} />
-        </Card>
-      ) : !r.posthog ? (
-        <Card className="mb-6">{syncErr("posthog") ? <Empty>Sync error: {syncErr("posthog")}</Empty> : <Waiting source="PostHog" />}</Card>
-      ) : (
-        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader
-              title="Traffic"
-              hint="Daily unique visitors and pageviews"
-              right={
-                <Legend
-                  items={[
-                    { name: "Pageviews", color: "var(--c-posthog)" },
-                    { name: "Visitors", color: "var(--c-gsc-2)" },
-                  ]}
-                />
-              }
-            />
-            <div className="p-3">
-              <TimeSeriesChart
-                dates={r.posthog.visitorsSeries.dates}
-                series={[
-                  { name: "Pageviews", color: "var(--c-posthog)", values: r.posthog.pageviewsSeries.values },
-                  { name: "Visitors", color: "var(--c-gsc-2)", values: r.posthog.visitorsSeries.values },
-                ]}
-                height={220}
-              />
-            </div>
-          </Card>
-          <div className="flex flex-col gap-3">
-            <Card>
-              <CardHeader title="Top pages" hint="Last 28 days" />
-              {r.posthogTopPages?.length ? (
-                <SimpleTable
-                  rows={r.posthogTopPages.slice(0, 6)}
-                  cols={[
-                    { key: "key", label: "Path" },
-                    { key: "visitors", label: "Visitors", num: true },
-                  ]}
-                />
-              ) : (
-                <Empty>No data</Empty>
-              )}
-            </Card>
-            <Card>
-              <CardHeader title="Referrers" hint="Last 28 days" />
-              {r.posthogReferrers?.length ? (
-                <SimpleTable
-                  rows={r.posthogReferrers.slice(0, 6)}
-                  cols={[
-                    { key: "key", label: "Source" },
-                    { key: "visitors", label: "Visitors", num: true },
-                  ]}
-                />
-              ) : (
-                <Empty>No data</Empty>
-              )}
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Reliability */}
-      <h2 className="eyebrow mb-3 mt-8">Reliability</h2>
-      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Response time"
-            dot="var(--c-health)"
-            hint={`${r.health.lastCheckedAt ? `Checked ${ago(r.health.lastCheckedAt)}` : "Not checked yet"}${r.health.statusCode ? ` · HTTP ${r.health.statusCode}` : ""}${r.health.error ? ` · ${r.health.error}` : ""}`}
-          />
-          <div className="p-3">
-            <TimeSeriesChart
-              dates={r.latency.dates}
-              series={[{ name: "Latency", color: "var(--c-health)", values: nn(r.latency.values) }]}
-              height={180}
-              kind="line"
-              format="ms"
-              dateFormat="datetime"
-              emptyLabel="Uptime checks run with each sync"
-            />
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Errors" dot="var(--c-sentry)" hint={r.config.sentryProject ? `Sentry · ${r.config.sentryProject}` : undefined} />
-          {!r.config.sentryProject ? (
-            <NotMapped what="Sentry project" slug={slug} />
-          ) : !r.sentry ? (
-            syncErr("sentry") ? <Empty>Sync error: {syncErr("sentry")}</Empty> : <Waiting source="Sentry" />
-          ) : (
-            <>
-              <div className="p-3">
-                <TimeSeriesChart
-                  dates={r.sentry.eventsSeries.dates}
-                  series={[{ name: "Error events", color: "var(--c-sentry)", values: r.sentry.eventsSeries.values }]}
-                  height={100}
-                  kind="bar"
-                  emptyLabel="No error events 🎉"
-                />
-              </div>
-              {r.sentryIssues?.length ? (
-                <ul className="divide-y divide-border/60 border-t border-border">
-                  {r.sentryIssues.slice(0, 6).map((i) => (
-                    <li key={i.id} className="flex items-center gap-3 px-4 py-2 text-sm">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${i.level === "error" || i.level === "fatal" ? "bg-destructive" : "bg-warning"}`} aria-label={i.level} />
-                      <a href={i.permalink} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:text-primary" title={i.title}>
-                        {i.title}
-                      </a>
-                      <span className="tabular shrink-0 text-xs text-muted-foreground">
-                        {fmtNum(i.count)} ev · {fmtNum(i.userCount)} users · {ago(i.lastSeen)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Empty>No unresolved issues.</Empty>
-              )}
-            </>
-          )}
-        </Card>
-      </div>
-
+      {tab === "summary" ? <SummaryTab r={r} i={i} range={range} /> : null}
+      {tab === "google" ? <GoogleTab r={r} i={i} range={range} syncError={syncErr("gsc")} /> : null}
+      {tab === "visitors" ? <VisitorsTab r={r} i={i} range={range} syncError={syncErr("posthog")} /> : null}
+      {tab === "health" ? <HealthTab r={r} i={i} range={range} syncError={syncErr("sentry")} /> : null}
+      {tab === "seo" ? <SeoTab r={r} i={i} /> : null}
     </>
   );
 }

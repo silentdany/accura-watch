@@ -1,21 +1,26 @@
+"use client";
+
 import Link from "next/link";
 import { RANGES } from "@/lib/dates";
+import { useI18n } from "@/i18n/client";
 
-export function RangeTabs({ value, basePath }: { value: number; basePath: string }) {
+/** Period picker; keeps other query params (e.g. the active tab). */
+export function RangeTabs({ value, basePath, query = {} }: { value: number; basePath: string; query?: Record<string, string> }) {
+  const { t } = useI18n();
   return (
-    <div className="inline-flex rounded-lg border border-border-strong bg-card p-0.5" role="tablist" aria-label="Period">
+    <div className="inline-flex rounded-xl border border-border bg-muted p-1" role="radiogroup" aria-label={t.period.label}>
       {RANGES.map((r) => (
         <Link
           key={r}
-          href={`${basePath}?range=${r}`}
-          role="tab"
-          aria-selected={r === value}
+          href={{ pathname: basePath, query: { ...query, range: r } }}
+          role="radio"
+          aria-checked={r === value}
           scroll={false}
-          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-            r === value ? "bg-muted text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border-strong))]" : "text-muted-foreground hover:text-foreground"
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            r === value ? "bg-card text-foreground shadow-[var(--shadow)]" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          {r}d
+          {t.period[r]}
         </Link>
       ))}
     </div>
