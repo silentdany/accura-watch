@@ -90,7 +90,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_site_insights",
     title: "Site insights",
     description:
-      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, DataForSEO traffic estimate vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), new referring domains → clicks (weekly, 0–8 week lag), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20) with volume/difficulty/intent, share of voice, clicks by search intent, per-page search share, organic competitors with traffic calibrated on this site's real-vs-estimated ratio, content gaps, backlink velocity and authority history.",
+      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, DataForSEO traffic estimate vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), new referring domains → clicks (weekly, 0–8 week lag), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20) with volume/difficulty/intent, share of voice, clicks by search intent, per-page search share, organic competitors with traffic calibrated on this site's real-vs-estimated ratio, content gaps, backlink velocity and authority history. Each correlation carries its raw daily or weekly series for charting.",
     input: z.object({ site: siteArg, range: rangeArg }),
     annotations: { readOnlyHint: true },
     async handler({ site, range }) {

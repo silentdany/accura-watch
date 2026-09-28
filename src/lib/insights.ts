@@ -25,6 +25,11 @@ export type Correlation = {
   days: number;
   strength: "strong" | "moderate" | "weak" | "none";
   sentence: string;
+  /**
+   * Raw (not detrended) values behind the correlation, for charting: one point per day or per week.
+   * Position is stored as-is (lower = better).
+   */
+  series: { dates: string[]; driver: (number | null)[]; outcome: (number | null)[] };
 };
 
 export type QueryOpportunity = {
@@ -220,7 +225,9 @@ function correlate(series: Partial<Record<MetricKey, Map<string, number>>>, ds: 
     }
     if (!best) continue;
     const s = strength(best.r);
+    const raw = (k: MetricKey, m: Map<string, number>) => ds.map((d) => (m.has(d) ? (k === "position" ? -m.get(d)! : m.get(d)!) : null));
     out.push({
+      series: { dates: ds, driver: raw(driver, series[driver]!), outcome: raw(outcome, series[outcome]!) },
       driver,
       outcome,
       lag: s === "none" ? 0 : best.lag,
@@ -291,6 +298,11 @@ function linksToClicks(links: Map<string, number>, clicks: Map<string, number>, 
   if (!best) return null;
   const st = strength(best.r);
   return {
+    series: {
+      dates: weeks,
+      driver: weeks.map((w) => a.values.get(w) ?? null),
+      outcome: weeks.map((w) => b.values.get(w) ?? null),
+    },
     driver: "links",
     outcome: "clicks",
     lag: st === "none" ? 0 : best.lag,

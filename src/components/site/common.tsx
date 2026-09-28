@@ -5,6 +5,8 @@ import type { Correlation, QueryOpportunity } from "@/lib/insights";
 import type { Format, Messages } from "@/i18n";
 import { getI18n } from "@/i18n/server";
 import { Badge, Card, CardHeader, Delta, Empty } from "../ui";
+import { ChevronRight } from "lucide-react";
+import { CorrelationChart } from "../correlation-chart";
 
 export async function NotMapped({ what, slug }: { what: string; slug: string }) {
   const { t } = await getI18n();
@@ -110,14 +112,16 @@ export function correlationSentence(c: Correlation, t: Messages): string {
 const STRENGTH_TONE = { strong: "info", moderate: "info", weak: "neutral", none: "neutral" } as const;
 
 /** Correlations as readable sentences, strongest first; "no link" results fold into one line. */
-export async function CorrelationList({ items, showNone = true }: { items: Correlation[]; showNone?: boolean }) {
+export async function CorrelationList({ items, showNone = true, openFirst = true }: { items: Correlation[]; showNone?: boolean; openFirst?: boolean }) {
   const { t, f } = await getI18n();
-  const linked = items.filter((c) => c.strength !== "none");
+  // Non-obvious causes first (links, speed, errors): "more visits → more visitors" teaches less.
+  const insightful = (c: Correlation) => (["links", "latency", "errors"].includes(c.driver) ? 0 : 1);
+  const linked = items.filter((c) => c.strength !== "none").sort((a, b) => insightful(a) - insightful(b));
   const none = items.filter((c) => c.strength === "none");
   if (!items.length) return <Empty>{t.correlations.notEnough}</Empty>;
   return (
     <div className="flex flex-col gap-3 px-5 pb-5">
-      {linked.map((c) => (
+      {linked.map((c, idx) => (
         <div key={`${c.driver}-${c.outcome}`} className="flex items-start gap-3 rounded-xl bg-muted/70 p-4">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card text-info shadow-[var(--shadow)]">
             <Link2 className="h-4 w-4" aria-hidden />
@@ -129,6 +133,15 @@ export async function CorrelationList({ items, showNone = true }: { items: Corre
               {t.correlations.basedOn(c.unit === "week" ? t.time.weeks(c.days) : t.time.days(c.days))}
               <span className="tabular text-subtle">r = {f.dec(c.r, 2)}</span>
             </p>
+            <details className="group mt-3" open={openFirst && idx === 0 ? true : undefined}>
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground">
+                <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden />
+                {t.correlations.showChart}
+              </summary>
+              <div className="mt-3 rounded-lg bg-card p-3">
+                <CorrelationChart c={c} height={180} />
+              </div>
+            </details>
           </div>
         </div>
       ))}

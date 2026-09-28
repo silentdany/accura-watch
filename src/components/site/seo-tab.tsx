@@ -4,7 +4,8 @@ import type { SiteInsights, AuthorityPoint } from "@/lib/insights";
 import { getI18n } from "@/i18n/server";
 import { Badge, Card, CardHeader, Delta, Empty, Stat } from "../ui";
 import { Sparkline } from "../sparkline";
-import { CorrelationList } from "./common";
+import { correlationSentence } from "./common";
+import { CorrelationChart } from "../correlation-chart";
 
 type SeoDetail = {
   organic?: { keywords: number; etv: number; top3: number; top10: number; trafficCost: number } | null;
@@ -100,8 +101,10 @@ export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
 
       {links.length ? (
         <Card>
-          <CardHeader title={t.correlations.title} hint={t.correlations.hint} />
-          <CorrelationList items={links} />
+          <CardHeader title={correlationSentence(links[0], t)} hint={t.correlations.hint} />
+          <div className="px-5 pb-5">
+            <CorrelationChart c={links[0]} height={280} />
+          </div>
         </Card>
       ) : null}
 
