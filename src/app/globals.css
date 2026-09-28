@@ -21,6 +21,7 @@
   --primary-foreground: 0 0% 100%;
   --ring: 214 84% 52%;
   --link: 214 78% 44%;
+  --brand: 213 67% 50%;
   /* Status: reserved, always paired with an icon + a word. */
   --good: 152 62% 32%;
   --good-soft: 150 55% 94%;
@@ -66,6 +67,7 @@
     --primary-foreground: 225 16% 9%;
     --ring: 214 90% 62%;
     --link: 214 90% 68%;
+    --brand: 213 85% 62%;
     --good: 152 55% 52%;
     --good-soft: 152 40% 14%;
     --warning: 38 92% 58%;
@@ -104,6 +106,7 @@
   --primary-foreground: 225 16% 9%;
   --ring: 214 90% 62%;
   --link: 214 90% 68%;
+  --brand: 213 85% 62%;
   --good: 152 55% 52%;
   --good-soft: 152 40% 14%;
   --warning: 38 92% 58%;

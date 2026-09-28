@@ -11,18 +11,14 @@ import { StatusBadge, type Status } from "./ui-client";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
 import { LocaleSwitch, ThemeSwitch } from "./prefs";
+import { LogoMark } from "./logo";
 
 export type ShellSite = { slug: string; name: string; domain: string; status: Status; pinned: boolean };
 
 function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight text-foreground">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-hidden>
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-      </span>
+      <LogoMark size={30} />
       Accura Watch
     </Link>
   );
