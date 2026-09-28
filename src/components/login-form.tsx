@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useI18n } from "@/i18n/client";
+import { LogoMark } from "./logo";
 
 function authErrorMessage(err: unknown, fallback: string): string {
   if (!err) return fallback;
@@ -63,12 +64,7 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground" aria-hidden>
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </span>
+          <LogoMark size={64} className="mb-4" />
           <h1 className="text-2xl font-semibold tracking-tight">{l.title}</h1>
           <p className="mt-1 text-[15px] text-muted-foreground">{l.subtitle}</p>
         </div>
