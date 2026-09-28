@@ -73,7 +73,7 @@ export default async function SitePage({ params, searchParams }: Params) {
         }
       />
 
-      <nav className="-mx-4 mb-8 overflow-x-auto border-b border-border px-4 sm:mx-0 sm:px-0" aria-label={t.nav.sites}>
+      <nav className="no-scrollbar -mx-4 mb-8 overflow-x-auto overflow-y-hidden border-b border-border px-4 sm:mx-0 sm:px-0" aria-label={t.nav.sites}>
         <ul className="flex min-w-max gap-1">
           {TABS.map((k) => (
             <li key={k}>

@@ -182,7 +182,7 @@ export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
               </div>
             ))}
           </dl>
-          {detail?.errors?.length ? <p className="border-t border-border px-5 py-3 text-[13px] text-warning">{detail.errors.join(" · ")}</p> : null}
+          {detail?.errors?.length ? <p className="border-t border-border px-5 py-3 text-[13px] text-warning [overflow-wrap:anywhere]">{detail.errors.join(" · ")}</p> : null}
         </Card>
       ) : null}
     </div>

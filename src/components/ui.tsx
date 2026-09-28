@@ -141,7 +141,7 @@ export function Notice({ tone = "info", children, className = "" }: { tone?: key
   return (
     <div className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${cls} ${className}`}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-      <div className="min-w-0 text-foreground">{children}</div>
+      <div className="min-w-0 text-foreground [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }
@@ -158,5 +158,5 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
 }
 
 export function Empty({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`px-5 py-10 text-center text-sm text-muted-foreground ${className}`}>{children}</div>;
+  return <div className={`px-5 py-10 text-center text-sm text-muted-foreground [overflow-wrap:anywhere] ${className}`}>{children}</div>;
 }

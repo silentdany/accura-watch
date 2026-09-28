@@ -309,6 +309,14 @@
   }
 }
 
+/* Horizontal scrollers (tab bars) scroll by touch/trackpad without a visible bar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

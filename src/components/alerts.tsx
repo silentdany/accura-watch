@@ -27,7 +27,12 @@ export function describeAlert(a: Alert, t: Messages, f: Format): { text: string;
         tab: "health",
       };
     case "syncFailing":
-      return { text: `${t.alerts.syncFailing.text(src(a.source))}${a.data.error ? ` ${a.data.error}` : ""}`, action: t.alerts.syncFailing.action, tab: "settings" };
+      return {
+        // Raw provider errors can be huge JSON blobs: keep a readable excerpt, the full text is under Manage sites.
+        text: `${t.alerts.syncFailing.text(src(a.source))}${a.data.error ? ` ${a.data.error.length > 140 ? `${a.data.error.slice(0, 140)}…` : a.data.error}` : ""}`,
+        action: t.alerts.syncFailing.action,
+        tab: "settings",
+      };
   }
 }
 
@@ -57,14 +62,14 @@ export async function AlertList({ alerts, withSite = true, max = 8 }: { alerts: 
                     <Icon className="h-4 w-4" aria-hidden />
                     <span className="sr-only">{t.alerts.severity[a.severity]}</span>
                   </span>
-                  <span className="min-w-0 flex-1">
+                  <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                     {withSite ? (
                       <span className="mb-0.5 flex items-center gap-1.5 text-sm font-semibold">
                         <Favicon domain={a.domain} size={14} />
                         {a.siteName}
                       </span>
                     ) : null}
-                    <span className="block text-[15px] leading-snug">{d.text}</span>
+                    <span className="block text-[15px] leading-snug [overflow-wrap:anywhere]">{d.text}</span>
                     <span className="mt-0.5 block text-sm text-muted-foreground">{d.action}</span>
                   </span>
                   <ArrowRight className="mt-2 h-4 w-4 shrink-0 text-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden />
