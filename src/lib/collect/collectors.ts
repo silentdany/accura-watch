@@ -4,7 +4,7 @@ import { addDays, utcDay, ymd, DAY_MS } from "@/lib/dates";
 import { querySearchAnalytics, type GscRow } from "@/lib/providers/google";
 import { hostClause, runHogql } from "@/lib/providers/posthog";
 import { listSentryIssues, sentryDailyEvents } from "@/lib/providers/sentry";
-import { backlinksNewLost, competitorsAndGaps, fetchDomainSeo, keywordOverview, rankHistory } from "@/lib/providers/seo";
+import { backlinksNewLost, competitorsAndGaps, fetchDomainSeo, keywordOverview, RANK_HISTORY_START, rankHistory } from "@/lib/providers/seo";
 import { checkHealth } from "@/lib/providers/health";
 import { writeDaily, writeInsight, type Point } from "./store";
 import { errorMessage } from "@/lib/http";
@@ -253,7 +253,7 @@ const backlinks: Collector = {
   skipReason: needsDfs,
   async run(site, { firstRun }) {
     // First run backfills 16 months (to line up with Search Console history); then a 2-week overlap.
-    const { days, cost } = await backlinksNewLost(site.domain, ymd(addDays(utcDay(), firstRun ? -490 : -14)));
+    const { days, cost, daysBack } = await backlinksNewLost(site.domain, firstRun ? 490 : 14);
     const pts = (f: (d: (typeof days)[number]) => number) => days.map((d) => ({ date: d.date, value: f(d) }));
     await writeDaily(site.id, "seo", {
       new_backlinks: pts((d) => d.newBacklinks),
@@ -261,7 +261,7 @@ const backlinks: Collector = {
       new_referring_domains: pts((d) => d.newReferringDomains),
       lost_referring_domains: pts((d) => d.lostReferringDomains),
     });
-    return `${days.length} days${usd(cost)}`;
+    return `${days.length} days (window ${daysBack} d)${usd(cost)}`;
   },
 };
 
@@ -271,7 +271,7 @@ const rankHist: Collector = {
   cadenceMinutes: () => MONTH,
   skipReason: needsDfs,
   async run(site, { firstRun }) {
-    const { months, cost } = await rankHistory(site.domain, firstRun ? "2020-01-01" : ymd(addDays(utcDay(), -95)));
+    const { months, cost } = await rankHistory(site.domain, firstRun ? RANK_HISTORY_START : ymd(addDays(utcDay(), -95)));
     const pts = (f: (m: (typeof months)[number]) => number) => months.map((m) => ({ date: m.month, value: f(m) }));
     await writeDaily(site.id, "seo", {
       monthly_keywords: pts((m) => m.keywords),
