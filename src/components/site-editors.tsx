@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Minus, Plus, Trash2 } from "lucide-react";
 import { addSiteAction, deleteSiteAction, importGscAction, updateSiteAction } from "@/app/actions";
+import { useI18n } from "@/i18n/client";
 import { ActionForm, Feedback, SubmitButton } from "./forms";
-import { Favicon } from "./ui";
+import { Favicon } from "./favicon";
 
 export type Option = { value: string; label: string };
 
@@ -30,19 +31,8 @@ export type CatalogOptions = {
   sentry: Option[] | null;
 };
 
-function MappingSelect({
-  name,
-  label,
-  value,
-  options,
-  placeholder,
-}: {
-  name: string;
-  label: string;
-  value: string | null;
-  options: Option[] | null;
-  placeholder: string;
-}) {
+function MappingSelect({ name, label, value, options, placeholder }: { name: string; label: string; value: string | null; options: Option[] | null; placeholder: string }) {
+  const { t } = useI18n();
   // No catalog (provider not connected / API error) → free text input.
   if (!options) {
     return (
@@ -52,12 +42,12 @@ function MappingSelect({
       </label>
     );
   }
-  const opts = value && !options.some((o) => o.value === value) ? [{ value, label: `${value} (not found)` }, ...options] : options;
+  const opts = value && !options.some((o) => o.value === value) ? [{ value, label: t.sites.notFound(value) }, ...options] : options;
   return (
     <label className="block">
       <span className="label">{label}</span>
       <select name={name} defaultValue={value ?? ""} className="input">
-        <option value="">— none —</option>
+        <option value="">— {t.common.none} —</option>
         {opts.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -68,102 +58,135 @@ function MappingSelect({
   );
 }
 
-export function SiteEditor({ site, catalogs }: { site: EditableSite; catalogs: CatalogOptions }) {
-  const errors = site.sync.filter((s) => !s.ok);
+function Chip({ on, label }: { on: boolean; label: string }) {
   return (
-    <div id={site.slug} className="scroll-mt-20 rounded-[var(--radius-md)] border border-border bg-card target:border-primary/60">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <Link href={`/sites/${site.slug}`} className="flex min-w-0 items-center gap-2.5 hover:text-primary">
-          <Favicon domain={site.domain} size={18} />
-          <span className="truncate font-medium">{site.name}</span>
-          <span className="truncate text-xs text-muted-foreground">{site.domain}</span>
-        </Link>
-        <div className="flex items-center gap-2">
-          {!site.active ? <span className="text-[11px] text-warning">paused</span> : null}
-          <form
-            action={deleteSiteAction}
-            onSubmit={(e) => {
-              if (!confirm(`Delete ${site.domain} and all its history?`)) e.preventDefault();
-            }}
-          >
-            <input type="hidden" name="id" value={site.id} />
-            <button type="submit" className="btn btn-danger px-2" aria-label={`Delete ${site.domain}`}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </form>
-        </div>
-      </div>
-      <ActionForm action={updateSiteAction} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
-        {(pending, state) => (
-          <>
-            <input type="hidden" name="id" value={site.id} />
-            <label className="block">
-              <span className="label">Name</span>
-              <input name="name" defaultValue={site.name} className="input" required />
-            </label>
-            <label className="block">
-              <span className="label">Uptime URL</span>
-              <input name="url" type="url" defaultValue={site.url} className="input" />
-            </label>
-            <MappingSelect name="gscProperty" label="Search Console property" value={site.gscProperty} options={catalogs.gsc} placeholder="sc-domain:example.com" />
-            <MappingSelect name="sentryProject" label="Sentry project" value={site.sentryProject} options={catalogs.sentry} placeholder="project-slug" />
-            <MappingSelect name="posthogProjectId" label="PostHog project" value={site.posthogProjectId} options={catalogs.posthog} placeholder="12345" />
-            <label className="block">
-              <span className="label">PostHog $host filter (shared projects)</span>
-              <input name="posthogHost" defaultValue={site.posthogHost ?? ""} placeholder={site.domain} className="input" />
-            </label>
-            <div className="flex items-end gap-4 pb-2 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" name="active" defaultChecked={site.active} className="accent-[hsl(var(--primary))]" /> Active
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" name="pinned" defaultChecked={site.pinned} className="accent-[hsl(var(--primary))]" /> Pinned
-              </label>
-            </div>
-            <div className="flex items-end justify-end gap-3">
-              <Feedback state={state} />
-              <SubmitButton pending={pending} variant="ghost">
-                Save
-              </SubmitButton>
-            </div>
-            {errors.length ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive sm:col-span-2 xl:col-span-4">
-                {errors.map((e) => (
-                  <p key={e.source}>
-                    <span className="font-medium uppercase">{e.source}</span> — {e.error}
-                  </p>
-                ))}
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${on ? "bg-good-soft text-good" : "bg-muted text-subtle"}`}>
+      {on ? <Check className="h-3 w-3" aria-hidden /> : <Minus className="h-3 w-3" aria-hidden />}
+      {label}
+    </span>
+  );
+}
+
+export function SiteEditor({ site, catalogs }: { site: EditableSite; catalogs: CatalogOptions }) {
+  const { t } = useI18n();
+  const s = t.sites;
+  const errors = site.sync.filter((x) => !x.ok);
+  const sourceName = (k: string) => (t.sources as Record<string, string>)[k] ?? k;
+  return (
+    <details id={site.slug} className="card group scroll-mt-24 target:ring-2 target:ring-ring" open={errors.length > 0 || undefined}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-5 py-4">
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+        <Favicon domain={site.domain} size={28} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">{site.name}</span>
+          <span className="block truncate text-sm text-muted-foreground">{site.domain}</span>
+        </span>
+        <span className="flex flex-wrap items-center gap-1.5">
+          {!site.active ? <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">{t.status.paused}</span> : null}
+          <Chip on={!!site.gscProperty} label="Google" />
+          <Chip on={!!site.posthogProjectId} label="PostHog" />
+          <Chip on={!!site.sentryProject} label="Sentry" />
+          {errors.length ? <span className="rounded-full bg-destructive-soft px-2 py-0.5 text-xs font-medium text-destructive">{s.syncProblems}</span> : null}
+        </span>
+      </summary>
+
+      <div className="border-t border-border px-5 pb-5 pt-4">
+        {errors.length ? (
+          <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm">
+            <p className="mb-1 font-semibold text-destructive">{s.syncProblems}</p>
+            {errors.map((e) => (
+              <p key={e.source} className="break-words text-foreground">
+                <span className="font-medium">{sourceName(e.source)}</span> · {e.error}
+              </p>
+            ))}
+          </div>
+        ) : null}
+        <ActionForm action={updateSiteAction} className="flex flex-col gap-4">
+          {(pending, state) => (
+            <>
+              <input type="hidden" name="id" value={site.id} />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="label">{s.name}</span>
+                  <input name="name" defaultValue={site.name} className="input" required />
+                </label>
+                <label className="block">
+                  <span className="label">{s.uptimeUrl}</span>
+                  <input name="url" type="url" defaultValue={site.url} className="input" />
+                </label>
               </div>
-            ) : null}
-          </>
-        )}
-      </ActionForm>
-    </div>
+              <p className="-mb-1 text-sm font-semibold">{s.connections}</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <MappingSelect name="gscProperty" label={s.gscProperty} value={site.gscProperty} options={catalogs.gsc} placeholder="sc-domain:example.com" />
+                <MappingSelect name="sentryProject" label={s.sentryProject} value={site.sentryProject} options={catalogs.sentry} placeholder="project-slug" />
+                <MappingSelect name="posthogProjectId" label={s.posthogProject} value={site.posthogProjectId} options={catalogs.posthog} placeholder="12345" />
+                <label className="block">
+                  <span className="label">{s.posthogHost}</span>
+                  <input name="posthogHost" defaultValue={site.posthogHost ?? ""} placeholder={site.domain} className="input" />
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="active" defaultChecked={site.active} className="h-4 w-4 accent-[hsl(var(--primary))]" /> {s.active}
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="pinned" defaultChecked={site.pinned} className="h-4 w-4 accent-[hsl(var(--primary))]" /> {s.pinned}
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                <Link href={`/sites/${site.slug}`} className="link text-sm font-medium">
+                  {t.common.seeSite}
+                </Link>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Feedback state={state} />
+                  <button
+                    type="submit"
+                    formAction={deleteSiteAction}
+                    formNoValidate
+                    className="btn btn-danger"
+                    onClick={(e) => {
+                      if (!confirm(s.confirmDelete(site.domain))) e.preventDefault();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" /> {t.common.delete}
+                  </button>
+                  <SubmitButton pending={pending}>{t.common.save}</SubmitButton>
+                </div>
+              </div>
+            </>
+          )}
+        </ActionForm>
+      </div>
+    </details>
   );
 }
 
 export function AddSiteForm() {
+  const { t } = useI18n();
+  const s = t.sites;
   return (
-    <ActionForm action={addSiteAction} resetOnSuccess className="flex flex-col gap-3 p-4">
+    <ActionForm action={addSiteAction} resetOnSuccess className="flex flex-col gap-4 px-5 pb-5">
       {(pending, state) => (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="label">Domain or URL</span>
+              <span className="label">{s.domain}</span>
               <input name="domain" required placeholder="example.com" className="input" />
             </label>
             <label className="block">
-              <span className="label">Name (optional)</span>
+              <span className="label">
+                {s.name} <span className="font-normal text-muted-foreground">({t.common.optional})</span>
+              </span>
               <input name="name" placeholder="Example" className="input" />
             </label>
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">Search Console, PostHog and Sentry projects are auto-matched.</p>
+          <p className="text-[13px] text-muted-foreground">{s.autoMatchNote}</p>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Feedback state={state} />
             <SubmitButton pending={pending}>
-              <Plus className="h-3.5 w-3.5" /> Add site
+              <Plus className="h-4 w-4" /> {s.addButton}
             </SubmitButton>
           </div>
-          <Feedback state={state} />
         </>
       )}
     </ActionForm>
@@ -171,28 +194,30 @@ export function AddSiteForm() {
 }
 
 export function GscImportForm({ candidates }: { candidates: { property: string; domain: string }[] }) {
+  const { t } = useI18n();
+  const s = t.sites;
   const [selected, setSelected] = useState<Set<string>>(new Set(candidates.map((c) => c.property)));
   const all = selected.size === candidates.length;
   return (
     <ActionForm action={importGscAction} className="flex flex-col">
       {(pending, state) => (
         <>
-          <div className="flex items-center justify-between border-b border-border px-4 py-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between border-y border-border px-5 py-2.5 text-sm text-muted-foreground">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={all}
                 onChange={() => setSelected(all ? new Set() : new Set(candidates.map((c) => c.property)))}
-                className="accent-[hsl(var(--primary))]"
+                className="h-4 w-4 accent-[hsl(var(--primary))]"
               />
-              Select all ({candidates.length})
+              {s.selectAll(candidates.length)}
             </label>
-            <span>{selected.size} selected</span>
+            <span>{s.selected(selected.size)}</span>
           </div>
-          <ul className="max-h-64 overflow-y-auto">
+          <ul className="max-h-72 overflow-y-auto">
             {candidates.map((c) => (
               <li key={c.property}>
-                <label className="flex cursor-pointer items-center gap-3 px-4 py-2 text-sm hover:bg-card-hover">
+                <label className="flex cursor-pointer items-center gap-3 px-5 py-2.5 text-[15px] hover:bg-card-hover">
                   <input
                     type="checkbox"
                     name="property"
@@ -204,18 +229,18 @@ export function GscImportForm({ candidates }: { candidates: { property: string; 
                       else next.delete(c.property);
                       setSelected(next);
                     }}
-                    className="accent-[hsl(var(--primary))]"
+                    className="h-4 w-4 accent-[hsl(var(--primary))]"
                   />
-                  <Favicon domain={c.domain} size={16} />
+                  <Favicon domain={c.domain} size={18} />
                   <span className="font-medium">{c.domain}</span>
-                  <span className="ml-auto truncate text-xs text-subtle">{c.property}</span>
+                  <span className="ml-auto hidden truncate text-[13px] text-subtle sm:inline">{c.property}</span>
                 </label>
               </li>
             ))}
           </ul>
-          <div className="flex items-center justify-end gap-3 border-t border-border px-4 py-3">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-5 py-4">
             <Feedback state={state} />
-            <SubmitButton pending={pending}>Import {selected.size || ""}</SubmitButton>
+            <SubmitButton pending={pending}>{s.importN(selected.size)}</SubmitButton>
           </div>
         </>
       )}

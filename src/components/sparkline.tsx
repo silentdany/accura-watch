@@ -6,6 +6,7 @@ export function Sparkline({
   height = 28,
   fill = true,
   label,
+  fluid = false,
 }: {
   values: number[];
   color: string;
@@ -13,10 +14,12 @@ export function Sparkline({
   height?: number;
   fill?: boolean;
   label?: string;
+  /** Stretch to the container's width (keeps a constant stroke width). */
+  fluid?: boolean;
 }) {
   const finite = values.filter((v) => Number.isFinite(v));
   if (finite.length < 2) {
-    return <div style={{ width, height }} className="rounded bg-muted/40" aria-hidden />;
+    return <div style={{ width: fluid ? "100%" : width, height }} className="rounded bg-muted/60" aria-hidden />;
   }
   const max = Math.max(...finite);
   const min = Math.min(0, ...finite);
@@ -42,20 +45,28 @@ export function Sparkline({
   const id = `sg-${color.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label ?? "trend"} className="overflow-visible">
+    <svg
+      width={fluid ? "100%" : width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio={fluid ? "none" : undefined}
+      role="img"
+      aria-label={label ?? "trend"}
+      className="block overflow-visible"
+    >
       {area ? (
         <>
           <defs>
             <linearGradient id={id} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+              <stop offset="0%" stopColor={color} stopOpacity="0.2" />
               <stop offset="100%" stopColor={color} stopOpacity="0" />
             </linearGradient>
           </defs>
           <path d={area} fill={`url(#${id})`} />
         </>
       ) : null}
-      <path d={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={x(lastIdx)} cy={y(values[lastIdx])} r={2} fill={color} />
+      <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      {fluid ? null : <circle cx={x(lastIdx)} cy={y(values[lastIdx])} r={2.5} fill={color} stroke="hsl(var(--card))" strokeWidth={1.5} />}
     </svg>
   );
 }

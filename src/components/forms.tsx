@@ -3,11 +3,12 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { Check, Copy, Loader2, RefreshCw, Wand2 } from "lucide-react";
 import { autoMatchAction, syncNowAction, type ActionState } from "@/app/actions";
+import { useI18n } from "@/i18n/client";
 
 export function Feedback({ state }: { state: ActionState }) {
   if (!state) return null;
   return (
-    <p role="status" className={`text-xs ${state.ok ? "text-primary" : "text-destructive"}`}>
+    <p role="status" className={`text-sm ${state.ok ? "text-good" : "text-destructive"}`}>
       {state.message}
     </p>
   );
@@ -37,7 +38,15 @@ export function ActionForm({
   );
 }
 
-export function SubmitButton({ pending, children, variant = "primary" }: { pending: boolean; children: React.ReactNode; variant?: "primary" | "ghost" }) {
+export function SubmitButton({
+  pending,
+  children,
+  variant = "primary",
+}: {
+  pending: boolean;
+  children: React.ReactNode;
+  variant?: "primary" | "ghost" | "danger";
+}) {
   return (
     <button type="submit" disabled={pending} className={`btn btn-${variant}`}>
       {pending ? <Loader2 className="spin h-3.5 w-3.5" /> : null}
@@ -56,56 +65,59 @@ function useFlash() {
   return [state, setState] as const;
 }
 
-export function SyncButton({ siteId, label = "Sync now" }: { siteId?: string; label?: string }) {
+export function SyncButton({ siteId, label }: { siteId?: string; label?: string }) {
+  const { t } = useI18n();
   const [pending, start] = useTransition();
   const [state, setState] = useFlash();
   return (
     <div className="flex items-center gap-3">
       {state ? (
-        <span className={`max-w-md truncate text-xs ${state.ok ? "text-primary" : "text-destructive"}`} title={state.message}>
+        <span className={`max-w-xs truncate text-sm ${state.ok ? "text-good" : "text-destructive"}`} title={state.message} role="status">
           {state.message}
         </span>
       ) : null}
       <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => start(async () => setState(await syncNowAction(siteId)))}>
-        <RefreshCw className={`h-3.5 w-3.5 ${pending ? "spin" : ""}`} />
-        {pending ? "Syncing…" : label}
+        <RefreshCw className={`h-4 w-4 ${pending ? "spin" : ""}`} />
+        {pending ? t.sync.running : (label ?? t.sync.now)}
       </button>
     </div>
   );
 }
 
 export function AutoMatchButton() {
+  const { t } = useI18n();
   const [pending, start] = useTransition();
   const [state, setState] = useFlash();
   return (
     <div className="flex items-center gap-3">
-      {state ? <span className={`text-xs ${state.ok ? "text-primary" : "text-destructive"}`}>{state.message}</span> : null}
+      {state ? <span className={`text-sm ${state.ok ? "text-good" : "text-destructive"}`} role="status">{state.message}</span> : null}
       <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => start(async () => setState(await autoMatchAction()))}>
-        <Wand2 className="h-3.5 w-3.5" />
-        {pending ? "Matching…" : "Auto-match projects"}
+        <Wand2 className="h-4 w-4" />
+        {pending ? t.sites.matching : t.sites.autoMatch}
       </button>
     </div>
   );
 }
 
 export function CopyField({ value, mono = true }: { value: string; mono?: boolean }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-stretch gap-2">
-      <code className={`min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-border-strong bg-muted px-2.5 py-2 text-xs ${mono ? "font-mono" : ""}`}>
+      <code className={`min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-border bg-muted px-3 py-2 text-[13px] ${mono ? "font-mono" : ""}`}>
         {value}
       </code>
       <button
         type="button"
         className="btn btn-ghost px-2.5"
-        aria-label="Copy"
+        aria-label={copied ? t.common.copied : t.common.copy}
         onClick={async () => {
           await navigator.clipboard.writeText(value);
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         }}
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? <Check className="h-4 w-4 text-good" /> : <Copy className="h-4 w-4" />}
       </button>
     </div>
   );
