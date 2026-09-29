@@ -92,7 +92,7 @@ export default async function SitesPage() {
                 sentryProject: x.sentryProject,
                 active: x.active,
                 pinned: x.pinned,
-                sync: x.syncStates.map((st) => ({ source: st.source, ok: st.ok, error: st.error, lastRunAt: st.lastRunAt.toISOString() })),
+                sync: x.syncStates.map((st) => ({ source: st.source, ok: st.ok, error: st.error, lastRunAt: st.lastRunAt.toISOString(), lastSuccessAt: st.lastSuccessAt?.toISOString() ?? null })),
               }}
             />
           ))}

@@ -8,7 +8,8 @@ import { getI18n } from "@/i18n/server";
 import { Badge, Card, CardHeader, Delta, Stat } from "../ui";
 import { TimeSeriesChart } from "../chart";
 import { AlertList } from "../alerts";
-import { CorrelationList } from "./common";
+import { computeFreshness } from "@/lib/metrics";
+import { CorrelationList, FreshnessLine } from "./common";
 
 export async function SummaryTab({ r, i, range }: { r: SiteReport; i: SiteInsights; range: Range }) {
   const { t, f } = await getI18n();
@@ -63,6 +64,7 @@ export async function SummaryTab({ r, i, range }: { r: SiteReport; i: SiteInsigh
             </li>
           ))}
         </ul>
+        <FreshnessLine items={computeFreshness(r.sync)} />
       </Card>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

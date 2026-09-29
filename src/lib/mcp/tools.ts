@@ -60,7 +60,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_overview",
     title: "Portfolio overview",
     description:
-      "At-a-glance KPIs for every watched site: Search Console clicks/impressions/CTR/position, PostHog visitors, Sentry issues & error events, uptime/latency/TLS, domain SEO (rank, referring domains, organic keywords) — each with previous-period comparison — plus portfolio totals and active alerts. Start here.",
+      "At-a-glance KPIs for every watched site: Search Console clicks/impressions/CTR/position, PostHog visitors, Sentry issues & error events, uptime/latency/TLS, domain SEO (rank, referring domains, organic keywords) — each with previous-period comparison — plus portfolio totals and active alerts. `freshness` gives the last successful collection time per source (Search Console ~6 h, PostHog ~2 h, Sentry ~1 h, uptime ~4 min): always quote it next to the numbers, they are not equally recent. Start here.",
     input: z.object({ range: rangeArg, include_series: z.boolean().optional().describe("Include daily series (bigger output). Default false.") }),
     annotations: { readOnlyHint: true },
     async handler({ range, include_series }) {
@@ -131,7 +131,7 @@ export const TOOLS: ToolDef[] = [
         posthogProjectId: s.posthogProjectId,
         posthogHost: s.posthogHost,
         sentryProject: s.sentryProject,
-        sync: s.syncStates.map((st) => ({ source: st.source, ok: st.ok, error: st.error, lastRunAt: st.lastRunAt })),
+        sync: s.syncStates.map((st) => ({ source: st.source, ok: st.ok, error: st.error, lastRunAt: st.lastRunAt, lastSuccessAt: st.lastSuccessAt })),
       }));
     },
   }),

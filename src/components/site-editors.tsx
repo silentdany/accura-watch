@@ -22,7 +22,7 @@ export type EditableSite = {
   sentryProject: string | null;
   active: boolean;
   pinned: boolean;
-  sync: { source: string; ok: boolean; error: string | null; lastRunAt: string }[];
+  sync: { source: string; ok: boolean; error: string | null; lastRunAt: string; lastSuccessAt: string | null }[];
 };
 
 export type CatalogOptions = {
