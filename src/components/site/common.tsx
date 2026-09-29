@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Link2, Sparkles } from "lucide-react";
-import type { TopQueryRow } from "@/lib/metrics";
+import { Link2, Sparkles, TriangleAlert } from "lucide-react";
+import type { Freshness, TopQueryRow } from "@/lib/metrics";
 import type { Correlation, QueryOpportunity } from "@/lib/insights";
 import type { Format, Messages } from "@/i18n";
 import { getI18n } from "@/i18n/server";
@@ -205,5 +205,39 @@ export async function OpportunitiesCard({ ctrGaps, striking }: { ctrGaps: QueryO
         />
       </div>
     </Card>
+  );
+}
+
+const SOURCE_COLOR: Record<Freshness["source"], string> = {
+  gsc: "var(--c-gsc)",
+  posthog: "var(--c-posthog)",
+  sentry: "var(--c-sentry)",
+  health: "var(--c-health)",
+};
+
+/** When each source was last collected. Sources refresh at different paces, so one shared "updated" stamp would mislead. */
+export async function FreshnessLine({ items }: { items: Freshness[] }) {
+  const { t, f } = await getI18n();
+  if (!items.length) return null;
+  return (
+    <div className="border-t border-border px-5 py-3">
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-subtle" title={t.time.collectedHelp}>
+        {t.time.collected}
+      </p>
+      <ul className="flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-muted-foreground">
+        {items.map((x) => (
+          <li key={x.source} className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: SOURCE_COLOR[x.source] }} aria-hidden />
+            <span>{t.sources[x.source]}</span>
+            <span className="font-medium text-foreground">{f.ago(x.at)}</span>
+            {!x.ok ? (
+              <span className="inline-flex items-center gap-1 text-warning">
+                <TriangleAlert className="h-3.5 w-3.5" aria-hidden /> {t.time.collectionFailed}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

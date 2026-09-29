@@ -64,7 +64,30 @@ export type SeoSummary = {
   collectedAt: string | null;
 };
 
-export type SyncInfo = { source: string; ok: boolean; error: string | null; lastRunAt: string };
+export type SyncInfo = { source: string; ok: boolean; error: string | null; lastRunAt: string; lastSuccessAt: string | null };
+
+/** Sources shown in the "how fresh is this?" line, in display order. */
+export const FRESHNESS_SOURCES = ["gsc", "posthog", "sentry", "health"] as const;
+export type FreshnessSource = (typeof FRESHNESS_SOURCES)[number];
+
+/**
+ * When a source was last collected *successfully*. `at` is the oldest success across the
+ * sites it covers (the honest number: one stale site makes the whole figure stale), null when
+ * some site was never collected. `ok` is false when the latest attempt failed.
+ */
+export type Freshness = { source: FreshnessSource; at: string | null; ok: boolean };
+
+export function computeFreshness(states: { source: string; ok: boolean; lastSuccessAt: Date | string | null }[]): Freshness[] {
+  const out: Freshness[] = [];
+  for (const source of FRESHNESS_SOURCES) {
+    const list = states.filter((s) => s.source === source);
+    if (!list.length) continue;
+    const times = list.map((s) => (s.lastSuccessAt ? new Date(s.lastSuccessAt).getTime() : null));
+    const oldest = times.includes(null) ? null : Math.min(...(times as number[]));
+    out.push({ source, at: oldest == null ? null : new Date(oldest).toISOString(), ok: list.every((s) => s.ok) });
+  }
+  return out;
+}
 
 export type SiteRow = {
   id: string;
@@ -99,7 +122,10 @@ export type Alert = {
 export type Overview = {
   range: Range;
   generatedAt: string;
+  /** Newest run of ANY collector (uptime runs every few minutes): not a freshness signal, see `freshness`. */
   lastSync: string | null;
+  /** Last successful collection per source, so differently aged numbers don't look equally fresh. */
+  freshness: Freshness[];
   totals: {
     sites: number;
     up: number;
@@ -318,7 +344,7 @@ function buildRows({ sites, range, metrics, insights, checks, states }: BuildInp
       seo,
       sync: states
         .filter((s) => s.siteId === site.id)
-        .map((s) => ({ source: s.source, ok: s.ok, error: s.error, lastRunAt: s.lastRunAt.toISOString() })),
+        .map((s) => ({ source: s.source, ok: s.ok, error: s.error, lastRunAt: s.lastRunAt.toISOString(), lastSuccessAt: s.lastSuccessAt?.toISOString() ?? null })),
     };
   });
 }
@@ -445,6 +471,7 @@ export async function loadOverview(range: Range, opts: { includeInactive?: boole
     range,
     generatedAt: new Date().toISOString(),
     lastSync: lastSync?.toISOString() ?? null,
+    freshness: computeFreshness(data.states),
     totals: {
       sites: rows.length,
       up: rows.filter((r) => r.health.status === "up").length,

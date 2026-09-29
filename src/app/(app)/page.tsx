@@ -11,6 +11,7 @@ import { SyncButton } from "@/components/forms";
 import { TimeSeriesChart } from "@/components/chart";
 import { AlertList } from "@/components/alerts";
 import { SiteCard } from "@/components/site-card";
+import { FreshnessLine } from "@/components/site/common";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -99,7 +100,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         title={t.home.hello}
         subtitle={
           <>
-            {t.home.intro(o.sites.length)} <span className="text-subtle">· {t.time.updated(f.ago(o.lastSync))}</span>
+            {t.home.intro(o.sites.length)}
           </>
         }
         right={
@@ -122,6 +123,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             </li>
           ))}
         </ul>
+        <FreshnessLine items={o.freshness} />
       </Card>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
