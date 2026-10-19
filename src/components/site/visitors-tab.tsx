@@ -13,6 +13,9 @@ export async function VisitorsTab({ r, i, range, syncError }: { r: SiteReport; i
   const p = r.posthog;
   const vs = t.period.vsPrevious(range);
   const share = i.searchShare;
+  const breakdown = r.posthogReferrersByDay?.some((rows) => rows.length)
+    ? r.posthogReferrersByDay.map((rows) => rows.map((row) => ({ name: row.key === "$direct" ? t.visitors.direct : row.key, value: row.visitors })))
+    : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,6 +52,8 @@ export async function VisitorsTab({ r, i, range, syncError }: { r: SiteReport; i
               { name: t.metrics.visitors.label, color: "var(--c-posthog)", values: p.visitorsSeries.values },
               { name: t.metrics.pageviews.label, color: "var(--c-companion)", values: p.pageviewsSeries.values, dashed: true },
             ]}
+            breakdown={breakdown}
+            breakdownLabel={t.visitors.thatDay}
             height={260}
           />
         </div>

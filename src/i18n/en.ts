@@ -327,7 +327,8 @@ export const en: Messages = {
   },
   visitors: {
     chartTitle: "Visitors and page views",
-    chartHint: "Daily",
+    chartHint: "Each day. Hover a day to see where visitors came from.",
+    thatDay: "Where they came from",
     topPages: "Most visited pages",
     referrers: "Where your visitors come from",
     source: "Source",

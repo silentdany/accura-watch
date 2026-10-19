@@ -2,6 +2,7 @@ import type { HealthCheck, Insight, Site, SyncState } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { addDays, utcDay, ymd, type Range } from "@/lib/dates";
 import { pctChange } from "@/lib/format";
+import { DAILY_REFERRER_PREFIX } from "@/lib/collect/store";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -396,7 +397,12 @@ async function loadData(sites: Site[], range: Range) {
   const since = addDays(utcDay(), -(range * 2 + 10));
   const [metrics, seoMetrics, insights, checks, states] = await Promise.all([
     prisma.dailyMetric.findMany({
-      where: { siteId: { in: siteIds }, source: { in: ["gsc", "posthog", "sentry"] }, date: { gte: since } },
+      where: {
+        siteId: { in: siteIds },
+        source: { in: ["gsc", "posthog", "sentry"] },
+        date: { gte: since },
+        NOT: { key: { startsWith: DAILY_REFERRER_PREFIX } },
+      },
       select: { siteId: true, source: true, key: true, date: true, value: true },
     }),
     prisma.dailyMetric.findMany({
@@ -509,14 +515,40 @@ export type SiteReport = SiteRow & {
   gscTopPages: { startDate: string; endDate: string; rows: TopQueryRow[] } | null;
   posthogTopPages: { key: string; pageviews: number; visitors: number }[] | null;
   posthogReferrers: { key: string; visitors: number }[] | null;
+  /** Top referring domains per day, aligned with `posthog.visitorsSeries.dates`. Empty until that day is collected. */
+  posthogReferrersByDay: { key: string; visitors: number }[][] | null;
   sentryIssues: SentryIssueRow[] | null;
   seoDetail: Record<string, unknown> | null;
   latency: Series;
   alerts: Alert[];
 };
 
+function referrersAligned(rows: MetricRow[], siteId: string, dates: string[]): { key: string; visitors: number }[][] {
+  const byDate = new Map<string, { key: string; visitors: number }[]>();
+  for (const row of rows) {
+    if (row.siteId !== siteId || row.source !== "posthog" || !row.key.startsWith(DAILY_REFERRER_PREFIX)) continue;
+    const date = ymd(row.date);
+    const list = byDate.get(date) ?? [];
+    list.push({ key: row.key.slice(DAILY_REFERRER_PREFIX.length), visitors: row.value });
+    byDate.set(date, list);
+  }
+  for (const list of byDate.values()) list.sort((a, b) => b.visitors - a.visitors || a.key.localeCompare(b.key));
+  return dates.map((d) => byDate.get(d) ?? []);
+}
+
 export async function loadSiteReport(site: Site, range: Range): Promise<SiteReport> {
-  const data = await loadData([site], range);
+  const [data, referrerMetrics] = await Promise.all([
+    loadData([site], range),
+    prisma.dailyMetric.findMany({
+      where: {
+        siteId: site.id,
+        source: "posthog",
+        key: { startsWith: DAILY_REFERRER_PREFIX },
+        date: { gte: addDays(utcDay(), -range) },
+      },
+      select: { siteId: true, source: true, key: true, date: true, value: true },
+    }),
+  ]);
   const [row] = buildRows({ sites: [site], range, ...data });
   const insights = await prisma.insight.findMany({ where: { siteId: site.id } });
   const ins = <T,>(source: string, kind: string) => insightData<T>(insights, site.id, source, kind);
@@ -548,6 +580,7 @@ export async function loadSiteReport(site: Site, range: Range): Promise<SiteRepo
     gscTopPages: ins("gsc", "top_pages"),
     posthogTopPages: ins<{ rows: { key: string; pageviews: number; visitors: number }[] }>("posthog", "top_pages")?.rows ?? null,
     posthogReferrers: ins<{ rows: { key: string; visitors: number }[] }>("posthog", "top_referrers")?.rows ?? null,
+    posthogReferrersByDay: row.posthog ? referrersAligned(referrerMetrics, site.id, row.posthog.visitorsSeries.dates) : null,
     sentryIssues: ins<{ issues: SentryIssueRow[] }>("sentry", "issues")?.issues ?? null,
     seoDetail: ins("seo", "summary"),
     latency,

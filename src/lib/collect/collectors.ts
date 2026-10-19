@@ -6,7 +6,7 @@ import { hostClause, runHogql } from "@/lib/providers/posthog";
 import { listSentryIssues, sentryDailyEvents } from "@/lib/providers/sentry";
 import { backlinksNewLost, competitorsAndGaps, fetchDomainSeo, keywordOverview, RANK_HISTORY_START, rankHistory } from "@/lib/providers/seo";
 import { checkHealth } from "@/lib/providers/health";
-import { writeDaily, writeInsight, type Point } from "./store";
+import { DAILY_REFERRER_PREFIX, replacePrefixedDaily, writeDaily, writeInsight, type Point } from "./store";
 import { errorMessage } from "@/lib/http";
 
 export type Source = "health" | "gsc" | "posthog" | "sentry" | "seo" | "backlinks" | "rank_history" | "competitors" | "keywords";
@@ -106,6 +106,33 @@ const gsc: Collector = {
 // ─── PostHog ────────────────────────────────────────────────────────────────
 
 const PERIODS = [7, 28, 90] as const;
+const TOP_REFERRERS_PER_DAY = 5;
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Top referring domains per day, keyed as `referrer:<domain>`. Empty and missing domains are direct traffic. */
+export function dailyReferrerSeries(rows: unknown[][]): Record<string, Point[]> {
+  const byDay = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const day = String(row[0] ?? "");
+    if (!DAY_KEY.test(day)) continue;
+    const visitors = Number(row[2]);
+    if (!Number.isFinite(visitors) || visitors <= 0) continue;
+    const raw = row[1] == null ? "" : String(row[1]).replace(/[\r\n\t]/g, " ").trim();
+    const key = (raw === "" ? "$direct" : raw).slice(0, 180);
+    const counts = byDay.get(day) ?? new Map<string, number>();
+    counts.set(key, (counts.get(key) ?? 0) + visitors);
+    byDay.set(day, counts);
+  }
+  const series: Record<string, Point[]> = {};
+  for (const [day, counts] of byDay) {
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, TOP_REFERRERS_PER_DAY);
+    for (const [key, value] of top) {
+      const metricKey = `${DAILY_REFERRER_PREFIX}${key}`;
+      (series[metricKey] ??= []).push({ date: day, value });
+    }
+  }
+  return series;
+}
 
 const posthog: Collector = {
   source: "posthog",
@@ -117,6 +144,15 @@ const posthog: Collector = {
     const host = hostClause(site.posthogHost);
     const since = ymd(addDays(utcDay(), firstRun ? -180 : -14));
     const base = `event = '$pageview'${host}`;
+    // Existing sites already have daily visitors. Referrers are new, so the first run that finds
+    // none of them walks the same 180-day history as a first collect. Later runs refresh 14 days.
+    const referrerBackfill =
+      firstRun ||
+      !(await prisma.dailyMetric.findFirst({
+        where: { siteId: site.id, source: "posthog", key: { startsWith: DAILY_REFERRER_PREFIX } },
+        select: { id: true },
+      }));
+    const sinceReferrers = referrerBackfill ? ymd(addDays(utcDay(), -180)) : since;
 
     const [daily, summary, pages, referrers] = await Promise.all([
       runHogql(
@@ -179,6 +215,38 @@ const posthog: Collector = {
         visitors: Number(v),
       })),
     });
+    const referrersByDay = await runHogql(
+      pid,
+      `SELECT day, referrer, visitors
+       FROM (
+         SELECT day, referrer, visitors, row_number() OVER (PARTITION BY day ORDER BY visitors DESC) AS rn
+         FROM (
+           SELECT toString(toDate(timestamp)) AS day,
+                  if(properties.$referring_domain IS NULL OR properties.$referring_domain = '', '$direct', properties.$referring_domain) AS referrer,
+                  uniq(person_id) AS visitors
+           FROM events
+           WHERE ${base} AND timestamp >= toDateTime('${sinceReferrers} 00:00:00')
+           GROUP BY day, referrer
+         )
+       )
+       WHERE rn <= ${TOP_REFERRERS_PER_DAY}
+       ORDER BY day, visitors DESC
+       LIMIT 2000`,
+    );
+    const referrerSeries = dailyReferrerSeries(referrersByDay.results);
+    const lastReferrerDay = Object.values(referrerSeries).reduce((max, points) => {
+      for (const p of points) if (p.date > max) max = p.date;
+      return max;
+    }, sinceReferrers);
+    const today = ymd(utcDay());
+    await replacePrefixedDaily(
+      site.id,
+      "posthog",
+      DAILY_REFERRER_PREFIX,
+      sinceReferrers,
+      lastReferrerDay > today ? lastReferrerDay : today,
+      referrerSeries,
+    );
     return `${series.visitors.length} days`;
   },
 };

@@ -326,7 +326,8 @@ export const fr = {
   },
   visitors: {
     chartTitle: "Visiteurs et pages vues",
-    chartHint: "Chaque jour",
+    chartHint: "Chaque jour. Survole un jour pour voir d'où viennent les visiteurs.",
+    thatDay: "D'où ils viennent",
     topPages: "Pages les plus visitées",
     referrers: "D'où viennent tes visiteurs",
     source: "Source",

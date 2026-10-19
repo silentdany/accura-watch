@@ -25,6 +25,9 @@ type Props = {
   indexed?: boolean;
   /** Extra tooltip-only rows (e.g. CTR under clicks/impressions). */
   extra?: { name: string; values: (number | null)[]; format?: Format }[];
+  /** Per-day rows under the series values, indexed like `dates`. A day with no rows shows nothing extra. */
+  breakdown?: { name: string; value: number }[][];
+  breakdownLabel?: string;
 };
 
 function niceTicks(min: number, max: number, count = 4): number[] {
@@ -50,6 +53,8 @@ export function TimeSeriesChart({
   emptyLabel,
   indexed = false,
   extra = [],
+  breakdown,
+  breakdownLabel,
 }: Props) {
   const { t, f } = useI18n();
   const wrap = useRef<HTMLDivElement>(null);
@@ -239,8 +244,8 @@ export function TimeSeriesChart({
 
       {hover != null && hasData ? (
         <div
-          className="pointer-events-none absolute top-1 z-10 min-w-40 rounded-lg bg-popover px-3 py-2 text-[13px] text-popover-foreground shadow-[var(--shadow-lg)]"
-          style={{ left: Math.min(Math.max(x(hover) + 14, 0), width - 176) }}
+          className="pointer-events-none absolute top-1 z-10 w-max min-w-40 max-w-56 rounded-lg bg-popover px-3 py-2 text-[13px] text-popover-foreground shadow-[var(--shadow-lg)]"
+          style={{ left: Math.min(Math.max(x(hover) + 14, 0), Math.max(0, width - 224)) }}
         >
           <p className="mb-1 text-xs opacity-70">{fmtDate(dates[hover])}</p>
           {raw.map((s) => (
@@ -258,6 +263,17 @@ export function TimeSeriesChart({
               <span className="tabular font-semibold">{fmt(e.values[hover], e.format ?? format)}</span>
             </p>
           ))}
+          {breakdown?.[hover]?.length ? (
+            <div className="mt-1 border-t border-white/15 pt-1">
+              {breakdownLabel ? <p className="mb-0.5 text-xs opacity-70">{breakdownLabel}</p> : null}
+              {breakdown[hover].map((row) => (
+                <p key={row.name} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate opacity-85">{row.name}</span>
+                  <span className="tabular font-semibold">{fmt(row.value)}</span>
+                </p>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
