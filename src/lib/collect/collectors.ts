@@ -1,6 +1,6 @@
 import type { Site } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { addDays, utcDay, ymd, DAY_MS } from "@/lib/dates";
+import { addDays, parseYmd, utcDay, ymd, DAY_MS } from "@/lib/dates";
 import { querySearchAnalytics, type GscRow } from "@/lib/providers/google";
 import { hostClause, runHogql } from "@/lib/providers/posthog";
 import { listSentryIssues, sentryDailyEvents } from "@/lib/providers/sentry";
@@ -108,6 +108,37 @@ const gsc: Collector = {
 const PERIODS = [7, 28, 90] as const;
 const TOP_REFERRERS_PER_DAY = 5;
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+/** A browser shared by this many visitors, in this many countries, with one page each, is a sweep. */
+const NOISE_MIN_PERSONS = 15;
+const NOISE_MIN_COUNTRIES = 8;
+
+/**
+ * Pageviews for the time window, without browser-days that are one page per visitor
+ * spread across many countries. The same browser on another day still counts.
+ */
+function pageviewWhere(base: string, time: string): string {
+  const window = `${base} AND ${time}`;
+  return `${window} AND (toString(toDate(timestamp)), properties.$raw_user_agent) NOT IN (
+    SELECT toString(toDate(timestamp)) AS day, properties.$raw_user_agent AS ua
+    FROM events
+    WHERE ${window} AND properties.$raw_user_agent != ''
+    GROUP BY day, ua
+    HAVING uniq(person_id) >= ${NOISE_MIN_PERSONS}
+       AND uniq(properties.$geoip_country_code) >= ${NOISE_MIN_COUNTRIES}
+       AND count() = uniq(person_id)
+  )`;
+}
+
+/** One point per day in the window. A day the query omits was empty after filtering, so it is 0. */
+function fillDaily(points: Point[], from: string, to: string): Point[] {
+  const values = new Map(points.map((p) => [p.date, p.value]));
+  const out: Point[] = [];
+  for (let day = parseYmd(from); day.getTime() <= parseYmd(to).getTime(); day = addDays(day, 1)) {
+    const date = ymd(day);
+    out.push({ date, value: values.get(date) ?? 0 });
+  }
+  return out;
+}
 
 /** Top referring domains per day, keyed as `referrer:<domain>`. Empty and missing domains are direct traffic. */
 export function dailyReferrerSeries(rows: unknown[][]): Record<string, Point[]> {
@@ -154,11 +185,14 @@ const posthog: Collector = {
       }));
     const sinceReferrers = referrerBackfill ? ymd(addDays(utcDay(), -180)) : since;
 
+    const dailyWhere = pageviewWhere(base, `timestamp >= toDateTime('${since} 00:00:00')`);
+    const halfYearWhere = pageviewWhere(base, "timestamp >= now() - INTERVAL 180 DAY");
+    const monthWhere = pageviewWhere(base, "timestamp >= now() - INTERVAL 28 DAY");
     const [daily, summary, pages, referrers] = await Promise.all([
       runHogql(
         pid,
         `SELECT toString(toDate(timestamp)) AS day, count() AS pageviews, uniq(person_id) AS visitors
-         FROM events WHERE ${base} AND timestamp >= toDateTime('${since} 00:00:00')
+         FROM events WHERE ${dailyWhere}
          GROUP BY day ORDER BY day`,
       ),
       runHogql(
@@ -170,27 +204,34 @@ const posthog: Collector = {
              countIf(timestamp >= now() - INTERVAL ${n} DAY) AS pv${n},
              countIf(timestamp < now() - INTERVAL ${n} DAY AND timestamp >= now() - INTERVAL ${n * 2} DAY) AS pvp${n}`,
         ).join(",\n")}
-         FROM events WHERE ${base} AND timestamp >= now() - INTERVAL 180 DAY`,
+         FROM events WHERE ${halfYearWhere}`,
       ),
       runHogql(
         pid,
         `SELECT properties.$pathname AS path, count() AS pageviews, uniq(person_id) AS visitors
-         FROM events WHERE ${base} AND timestamp >= now() - INTERVAL 28 DAY
+         FROM events WHERE ${monthWhere}
          GROUP BY path ORDER BY pageviews DESC LIMIT 25`,
       ),
       runHogql(
         pid,
         `SELECT properties.$referring_domain AS referrer, uniq(person_id) AS visitors
-         FROM events WHERE ${base} AND timestamp >= now() - INTERVAL 28 DAY
+         FROM events WHERE ${monthWhere}
          GROUP BY referrer ORDER BY visitors DESC LIMIT 15`,
       ),
     ]);
 
-    const series: Record<string, Point[]> = { pageviews: [], visitors: [] };
+    const today = ymd(utcDay());
+    const pageviews: Point[] = [];
+    const visitors: Point[] = [];
     for (const [day, pv, v] of daily.results as [string, number, number][]) {
-      series.pageviews.push({ date: day, value: Number(pv) });
-      series.visitors.push({ date: day, value: Number(v) });
+      if (!DAY_KEY.test(day)) continue;
+      pageviews.push({ date: day, value: Number(pv) });
+      visitors.push({ date: day, value: Number(v) });
     }
+    const series: Record<string, Point[]> = {
+      pageviews: fillDaily(pageviews, since, today),
+      visitors: fillDaily(visitors, since, today),
+    };
     await writeDaily(site.id, "posthog", series);
 
     const row = (summary.results[0] ?? []) as number[];
@@ -225,7 +266,7 @@ const posthog: Collector = {
                   if(properties.$referring_domain IS NULL OR properties.$referring_domain = '', '$direct', properties.$referring_domain) AS referrer,
                   uniq(person_id) AS visitors
            FROM events
-           WHERE ${base} AND timestamp >= toDateTime('${sinceReferrers} 00:00:00')
+           WHERE ${pageviewWhere(base, `timestamp >= toDateTime('${sinceReferrers} 00:00:00')`)}
            GROUP BY day, referrer
          )
        )
@@ -238,7 +279,6 @@ const posthog: Collector = {
       for (const p of points) if (p.date > max) max = p.date;
       return max;
     }, sinceReferrers);
-    const today = ymd(utcDay());
     await replacePrefixedDaily(
       site.id,
       "posthog",

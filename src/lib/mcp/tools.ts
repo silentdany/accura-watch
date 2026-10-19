@@ -79,7 +79,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_site_report",
     title: "Site report",
     description:
-      "Full report for one site: KPI summary with deltas and daily series, top Search Console queries & pages (with previous-period clicks/position), PostHog top pages & referrers, daily top referring domains aligned with the visitor series (`posthogReferrersByDay`, empty until the next PostHog collect), top unresolved Sentry issues, uptime/latency, domain SEO detail and alerts.",
+      "Full report for one site: KPI summary with deltas and daily series, top Search Console queries & pages (with previous-period clicks/position), PostHog top pages & referrers, daily top referring domains aligned with the visitor series (`posthogReferrersByDay`, empty until the next PostHog collect). PostHog visitor counts skip a browser on a day when every visit from it was a single page across many countries. Also top unresolved Sentry issues, uptime/latency, domain SEO detail and alerts.",
     input: z.object({ site: siteArg, range: rangeArg }),
     annotations: { readOnlyHint: true },
     async handler({ site, range }) {
