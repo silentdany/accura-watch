@@ -16,7 +16,7 @@ function authErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
+export function LoginForm({ signupAllowed, nextPath = "/" }: { signupAllowed: boolean; nextPath?: string }) {
   const { t } = useI18n();
   const l = t.login;
   const [email, setEmail] = useState("");
@@ -31,7 +31,7 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
     setPending(true);
     try {
       if (mode === "signin") {
-        const { error: err } = await authClient.signIn.email({ email, password, callbackURL: "/" });
+        const { error: err } = await authClient.signIn.email({ email, password, callbackURL: nextPath });
         if (err) {
           setError(authErrorMessage(err, l.failedIn));
           setPending(false);
@@ -43,7 +43,7 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
           setPending(false);
           return;
         }
-        const { error: err } = await authClient.signUp.email({ email, password, name: email.split("@")[0], callbackURL: "/" });
+        const { error: err } = await authClient.signUp.email({ email, password, name: email.split("@")[0], callbackURL: nextPath });
         if (err) {
           setError(authErrorMessage(err, l.failedUp));
           setPending(false);
@@ -52,7 +52,7 @@ export function LoginForm({ signupAllowed }: { signupAllowed: boolean }) {
       }
       // Hard nav so Set-Cookie is on the next document request (soft
       // router.replace raced middleware and bounced back to /login).
-      window.location.assign("/");
+      window.location.assign(nextPath);
       return;
     } catch (err) {
       setError(authErrorMessage(err, l.failed));

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authorizeRequest } from "@/lib/api-tokens";
+import { authorizeMcp } from "@/lib/api-tokens";
 import { handleMcpPayload, SERVER_INFO } from "@/lib/mcp/server";
+import { wwwAuthenticate } from "@/lib/oauth/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,20 +9,22 @@ export const maxDuration = 300;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version",
+  "Access-Control-Expose-Headers": "WWW-Authenticate",
 };
 
-function unauthorized() {
+function unauthorized(invalid: boolean) {
   return NextResponse.json(
-    { jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized: create an API token in Settings → MCP & API" } },
-    { status: 401, headers: CORS },
+    { jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized. Sign in with OAuth, or send Authorization: Bearer aw_…" } },
+    { status: 401, headers: { ...CORS, "WWW-Authenticate": wwwAuthenticate(invalid) } },
   );
 }
 
 /** MCP Streamable HTTP endpoint (stateless, JSON responses). */
 export async function POST(req: NextRequest) {
-  if (!(await authorizeRequest(req))) return unauthorized();
+  const auth = await authorizeMcp(req);
+  if (auth !== "ok") return unauthorized(auth === "invalid");
   let payload: unknown;
   try {
     payload = await req.json();
@@ -34,14 +37,18 @@ export async function POST(req: NextRequest) {
 }
 
 /** No server-initiated SSE stream in stateless mode. */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await authorizeMcp(req);
+  if (auth !== "ok") return unauthorized(auth === "invalid");
   return NextResponse.json(
     { ...SERVER_INFO, transport: "streamable-http", hint: "POST JSON-RPC messages to this URL" },
     { status: 405, headers: { ...CORS, Allow: "POST" } },
   );
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
+  const auth = await authorizeMcp(req);
+  if (auth !== "ok") return unauthorized(auth === "invalid");
   return new NextResponse(null, { status: 405, headers: { ...CORS, Allow: "POST" } });
 }
 

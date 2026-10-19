@@ -12,9 +12,9 @@ export function GET() {
 
 ## Connect an agent
 
-- MCP (Streamable HTTP): ${base}/api/mcp — header \`Authorization: Bearer <token>\` (create a token in Settings → MCP & API)
-- Claude Code: \`claude mcp add --transport http accura-watch ${base}/api/mcp --header "Authorization: Bearer <token>"\`
-- REST: GET ${base}/api/v1 lists tools; POST ${base}/api/v1/tools/<name> with a JSON body calls one.
+- MCP (Streamable HTTP): ${base}/api/mcp — OAuth 2.1 (authorization code + PKCE). Paste that URL into the client; it opens a consent page. A bearer token from Settings still works for scripts.
+- Claude Code: \`claude mcp add --transport http accura-watch ${base}/api/mcp\`
+- REST: GET ${base}/api/v1 lists tools; POST ${base}/api/v1/tools/<name> with a JSON body calls one (API token or browser session, not an OAuth access token).
 
 ## Tools
 

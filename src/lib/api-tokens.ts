@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { auth } from "@/lib/auth";
+import { mcpResource, verifyOauthAccess } from "@/lib/oauth/server";
 
 export async function createApiToken(name: string): Promise<{ id: string; token: string }> {
   const token = randomToken("aw");
@@ -24,15 +25,28 @@ export async function verifyApiToken(token: string): Promise<boolean> {
   return true;
 }
 
+export type AuthResult = "ok" | "missing" | "invalid";
+
 /**
- * Accepts `Authorization: Bearer aw_...`, `?key=aw_...` (for MCP clients that
- * can't send headers) or a logged-in browser session.
+ * API tokens (`aw_…`, including `?key=` for clients that can't send headers) and a
+ * browser session open every API. OAuth access tokens (`awoa_…`) only open the MCP
+ * resource they were issued for, and are never accepted from the query string.
  */
-export async function authorizeRequest(req: Request): Promise<boolean> {
+export async function authorizeRequest(req: Request, opts?: { resource?: string }): Promise<AuthResult> {
   const header = req.headers.get("authorization");
-  const bearer = header?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  const key = bearer ?? new URL(req.url).searchParams.get("key");
-  if (key) return verifyApiToken(key);
+  const bearer = header?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
+  const queryKey = new URL(req.url).searchParams.get("key") ?? "";
+  const token = bearer || queryKey;
+  if (token.startsWith("awoa_") || token.startsWith("awor_")) {
+    if (!bearer || queryKey || !opts?.resource) return "invalid";
+    return (await verifyOauthAccess(bearer, opts.resource)) ? "ok" : "invalid";
+  }
+  if (token) return (await verifyApiToken(token)) ? "ok" : "invalid";
   const session = await auth.api.getSession({ headers: req.headers }).catch(() => null);
-  return !!session;
+  return session ? "ok" : "missing";
+}
+
+/** MCP calls: OAuth tokens must target this server. */
+export function authorizeMcp(req: Request): Promise<AuthResult> {
+  return authorizeRequest(req, { resource: mcpResource() });
 }

@@ -3,9 +3,9 @@ import { CheckCircle2, Circle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { integrationStatuses } from "@/lib/integrations";
 import { googleOAuthApp, googleRedirectUri } from "@/lib/providers/google";
-import { appUrl } from "@/lib/env";
 import { TOOLS } from "@/lib/mcp/tools";
-import { revokeTokenAction } from "@/app/actions";
+import { revokeOauthGrantAction, revokeTokenAction } from "@/app/actions";
+import { listOauthGrants, mcpResource } from "@/lib/oauth/server";
 import { getI18n, getTheme } from "@/i18n/server";
 import { Badge, Card, CardHeader, Notice, PageHeader, Section } from "@/components/ui";
 import { CopyField } from "@/components/forms";
@@ -29,15 +29,16 @@ const DOT: Record<string, string> = {
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const [{ t, f, locale }, theme, integrations, tokens] = await Promise.all([
+  const [{ t, f, locale }, theme, integrations, tokens, grants] = await Promise.all([
     getI18n(),
     getTheme(),
     integrationStatuses(),
     prisma.apiToken.findMany({ orderBy: { createdAt: "desc" } }),
+    listOauthGrants(),
   ]);
   const s = t.settings;
   const oauthApp = googleOAuthApp();
-  const mcpUrl = `${appUrl()}/api/mcp`;
+  const mcpUrl = mcpResource();
 
   return (
     <div className="flex flex-col gap-10">
@@ -119,9 +120,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <div className="flex flex-col gap-5 p-5">
               <div>
                 <p className="label">{s.mcpEndpoint}</p>
+                <p className="mb-2 text-sm text-muted-foreground">{s.oauthHint}</p>
                 <CopyField value={mcpUrl} />
               </div>
-              <CreateTokenForm mcpUrl={mcpUrl} />
+              <div>
+                <p className="label">{s.manualToken}</p>
+                <CreateTokenForm mcpUrl={mcpUrl} />
+              </div>
               <div className="text-[13px] text-muted-foreground">
                 <p className="mb-1 font-medium text-foreground">{s.alsoAvailable}</p>
                 <p>{s.rest}</p>
@@ -135,6 +140,27 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </div>
           </Card>
           <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader title={s.clients(grants.length)} />
+              {grants.length ? (
+                <ul className="divide-y divide-border px-5 pb-3">
+                  {grants.map((grant) => (
+                    <li key={grant.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
+                      <span className="font-medium">{grant.client.name}</span>
+                      <span className="ml-auto text-[13px] text-muted-foreground">{grant.lastUsedAt ? s.usedAgo(f.ago(grant.lastUsedAt)) : s.neverUsed}</span>
+                      <form action={revokeOauthGrantAction}>
+                        <input type="hidden" name="id" value={grant.id} />
+                        <button type="submit" className="btn btn-danger btn-sm">
+                          {s.revoke}
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-5 pb-5 text-sm text-muted-foreground">{s.noClients}</p>
+              )}
+            </Card>
             <Card>
               <CardHeader title={s.tokens(tokens.length)} />
               {tokens.length ? (

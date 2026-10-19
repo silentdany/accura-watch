@@ -78,12 +78,20 @@ Credentials entered in Settings are stored **AES-256-GCM encrypted** (key derive
 
 Endpoint: `POST <your-url>/api/mcp`. This is the Streamable HTTP transport, stateless, returning JSON responses.
 
+Clients that speak MCP OAuth (Claude, Cursor, Grok) only need the URL. A request without a token returns `401` with `WWW-Authenticate` pointing at the protected-resource metadata. The client registers itself, opens the consent page, and stores a refresh token.
+
+```bash
+claude mcp add --transport http accura-watch https://watch.example.com/api/mcp
+```
+
+Scripts and clients that cannot do OAuth still use a token from Settings → MCP & API:
+
 ```bash
 claude mcp add --transport http accura-watch https://watch.example.com/api/mcp \
   --header "Authorization: Bearer aw_xxx"
 ```
 
-For clients that can't send headers, `…/api/mcp?key=aw_xxx` also works. Keep that URL private.
+For those clients, `…/api/mcp?key=aw_xxx` also works. Keep that URL private. OAuth access tokens are not accepted in the query string, and they only authorize `/api/mcp` (not the REST API).
 
 **Tools**
 

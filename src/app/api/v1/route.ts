@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** REST mirror of the MCP tools: GET lists them, POST /api/v1/tools/:name calls one. */
 export async function GET(req: NextRequest) {
-  if (!(await authorizeRequest(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if ((await authorizeRequest(req)) !== "ok") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   return NextResponse.json({
     tools: TOOLS.map((t) => ({
       name: t.name,

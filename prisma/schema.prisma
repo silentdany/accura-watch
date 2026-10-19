@@ -176,3 +176,59 @@ model ApiToken {
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
 }
+
+/// OAuth client of the MCP authorization server (dynamic registration or a client-id metadata document).
+model OauthClient {
+  id                      String   @id
+  name                    String
+  redirectUris            String[]
+  grantTypes              String[]
+  responseTypes           String[]
+  tokenEndpointAuthMethod String   @default("none")
+  scope                   String?
+  clientUri               String?
+  /// "dcr" (registered here) or "cimd" (client_id is an https metadata URL).
+  kind                    String   @default("dcr")
+  createdAt               DateTime @default(now())
+  codes                   OauthCode[]
+  grants                  OauthGrant[]
+}
+
+/// One-time authorization code. Only the sha256 of the code is stored.
+model OauthCode {
+  id            String      @id @default(cuid())
+  codeHash      String      @unique
+  clientId      String
+  client        OauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  resource      String
+  scope         String
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([clientId])
+}
+
+/// Access token plus the refresh token that rotates it. Hashes only.
+/// A reused refresh token revokes every grant in the same family.
+model OauthGrant {
+  id               String      @id @default(cuid())
+  clientId         String
+  client           OauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  familyId         String
+  accessHash       String      @unique
+  refreshHash      String?     @unique
+  resource         String
+  scope            String
+  accessExpiresAt  DateTime
+  refreshExpiresAt DateTime
+  revokedAt        DateTime?
+  rotatedAt        DateTime?
+  lastUsedAt       DateTime?
+  createdAt        DateTime    @default(now())
+
+  @@index([clientId])
+  @@index([familyId])
+}

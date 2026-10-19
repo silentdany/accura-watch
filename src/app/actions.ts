@@ -6,6 +6,7 @@ import { runCollection } from "@/lib/collect";
 import { autoMatchSites, createSite, deleteSite, importFromGsc, updateSite } from "@/lib/sites";
 import { deleteIntegration, saveIntegration, type ProviderId } from "@/lib/integrations";
 import { createApiToken, revokeApiToken } from "@/lib/api-tokens";
+import { revokeOauthGrant } from "@/lib/oauth/server";
 import { errorMessage } from "@/lib/http";
 import { normalizePrivateKey } from "@/lib/google-key";
 import { cookies } from "next/headers";
@@ -183,6 +184,12 @@ export async function createTokenAction(_: ActionState, fd: FormData): Promise<A
 export async function revokeTokenAction(fd: FormData): Promise<void> {
   await guard();
   await revokeApiToken(String(fd.get("id")));
+  revalidatePath("/settings");
+}
+
+export async function revokeOauthGrantAction(fd: FormData): Promise<void> {
+  await guard();
+  await revokeOauthGrant(String(fd.get("id")));
   revalidatePath("/settings");
 }
 
