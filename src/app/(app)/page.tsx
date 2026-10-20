@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Bug, CheckCircle2, OctagonAlert, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Bot, Bug, CheckCircle2, Link2, OctagonAlert, ShieldAlert, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { loadOverview } from "@/lib/metrics";
+import { countsDiverge } from "@/lib/origins";
 import { integrationStatuses } from "@/lib/integrations";
 import { parseRange } from "@/lib/dates";
 import { pctChange } from "@/lib/format";
@@ -92,11 +93,31 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     const c = changeText(tot.visitors, tot.visitorsPrev);
     lines.push({ icon: <Users className="h-5 w-5 text-muted-foreground" />, text: s.visitors(f.num(tot.visitors), c ?? t.trend.flat.toLowerCase()) });
   }
+  const expiring = o.sites
+    .filter((site) => site.health.sslDaysLeft != null && site.health.sslDaysLeft < 14)
+    .sort((a, b) => a.health.sslDaysLeft! - b.health.sslDaysLeft!);
+  for (const site of expiring) {
+    const days = site.health.sslDaysLeft!;
+    lines.push({
+      icon: <ShieldAlert className={`h-5 w-5 ${days < 3 ? "text-destructive" : "text-warning"}`} />,
+      text: s.tls(site.name, days),
+    });
+  }
   const best = gscSites
     .map((x) => ({ x, c: pctChange(x.gsc!.clicks, x.gsc!.clicksPrev) }))
     .filter((b) => b.c != null && b.c >= 0.1 && b.x.gsc!.clicks >= 20)
     .sort((a, b) => b.c! - a.c!)[0];
   if (best && gscSites.length > 1) lines.push({ icon: <TrendingUp className="h-5 w-5 text-good" />, text: s.best(best.x.name, `+${f.pct(best.c!, 0)}`) });
+  if (o.linkYield) {
+    const y = o.linkYield;
+    const ratio = (n: number) => f.dec(n, n >= 10 ? 0 : 1);
+    const text = y.worst
+      ? s.linkYieldBoth(y.best.name, ratio(y.best.clicksPerDomain), y.worst.name, ratio(y.worst.clicksPerDomain))
+      : y.sites >= 2
+        ? s.linkYieldTied
+        : s.linkYield(y.best.name, ratio(y.best.clicksPerDomain));
+    lines.push({ icon: <Link2 className="h-5 w-5 text-muted-foreground" />, text });
+  }
   if (!tot.down) lines.push({ icon: <CheckCircle2 className="h-5 w-5 text-good" />, text: s.allUp });
   if (sentrySites.length) {
     lines.push({
@@ -109,6 +130,25 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const vs = t.period.vsPrevious(range);
   const bothTrends = gscSites.length > 0 && phSites.length > 0;
   const chartDates = phSites.length ? tot.visitorsSeries.dates : tot.clicksSeries.dates;
+  const noteDates = bothTrends || !gscSites.length ? chartDates : tot.clicksSeries.dates;
+  const mixByDate = new Map(o.dayMix.map((day) => [day.date, day]));
+  const dayNotes = phSites.length
+    ? noteDates.map((date) => {
+        const day = mixByDate.get(date);
+        if (!day?.site) return null;
+        const parts: string[] = [];
+        if (day.measured && day.google + day.direct + day.other > 0) {
+          parts.push(s.dayLead(day.site, f.num(day.google), f.num(day.direct), f.num(day.other)));
+          parts.push(s.dayOrigins);
+        } else {
+          parts.push(s.daySite(day.site));
+        }
+        if (day.measured && day.clicks != null && countsDiverge(day.clicks, day.google)) {
+          parts.push(s.dayGap(f.num(day.clicks), f.num(day.google)));
+        }
+        return parts.join(" ");
+      })
+    : undefined;
   const keywords = asPoints(tot.keywordsSeries.values);
   const referring = asPoints(tot.referringSeries.values);
   const hasSeo = tot.keywords != null || tot.referringDomains != null || tot.estimated != null;
@@ -203,7 +243,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <Card>
           <CardHeader
             title={bothTrends ? t.home.chartTitle : gscSites.length ? t.home.chartClicksTitle : t.home.chartVisitorsTitle}
-            hint={bothTrends ? t.home.chartHint : t.home.chartHintSingle}
+            hint={bothTrends ? t.home.chartHint : phSites.length ? t.home.chartVisitorsHint : t.home.chartHintSingle}
             dot={gscSites.length ? "var(--c-gsc)" : "var(--c-posthog)"}
             right={
               bothTrends ? (
@@ -231,6 +271,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                     ? [{ name: t.metrics.clicks.label, color: "var(--c-gsc)", values: tot.clicksSeries.values }]
                     : [{ name: t.metrics.visitors.label, color: "var(--c-posthog)", values: tot.visitorsSeries.values }]
               }
+              notes={dayNotes}
             />
           </div>
         </Card>

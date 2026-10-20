@@ -1,6 +1,7 @@
 import type { SiteReport } from "@/lib/metrics";
 import type { SiteInsights } from "@/lib/insights";
 import type { Range } from "@/lib/dates";
+import { clicksOnIssuePath, pathOf } from "@/lib/paths";
 import { getI18n } from "@/i18n/server";
 import { Card, CardHeader, Delta, Empty, Stat } from "../ui";
 import { TimeSeriesChart } from "../chart";
@@ -10,6 +11,14 @@ export async function HealthTab({ r, i, range, syncError }: { r: SiteReport; i: 
   const { t, f } = await getI18n();
   const h = r.health;
   const vs = t.period.vsPrevious(range);
+  const searchPages = new Map<string, number>();
+  for (const row of r.gscTopPages?.rows ?? []) {
+    const path = pathOf(row.key);
+    searchPages.set(path, (searchPages.get(path) ?? 0) + row.clicks);
+  }
+  const pagesForIssues = searchPages.size
+    ? [...searchPages].map(([path, searchClicks]) => ({ path, searchClicks }))
+    : i.pages;
   const latencyTone = h.latencyMs == null ? "" : h.latencyMs < 500 ? "text-good" : h.latencyMs < 1500 ? "text-warning" : "text-destructive";
 
   return (
@@ -87,7 +96,11 @@ export async function HealthTab({ r, i, range, syncError }: { r: SiteReport; i: 
           <CardHeader title={t.health.issuesTitle} help={t.metrics.issues.help} />
           {r.sentryIssues?.length ? (
             <ul className="flex flex-col gap-1 px-2 pb-2">
-              {r.sentryIssues.slice(0, 8).map((is) => (
+              {[...r.sentryIssues]
+                .map((is) => ({ is, clicks: clicksOnIssuePath(is.culprit, pagesForIssues) }))
+                .sort((a, b) => b.clicks - a.clicks || b.is.count - a.is.count)
+                .slice(0, 8)
+                .map(({ is, clicks }) => (
                 <li key={is.id}>
                   <a href={is.permalink} target="_blank" rel="noreferrer" className="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted">
                     <span
@@ -100,6 +113,7 @@ export async function HealthTab({ r, i, range, syncError }: { r: SiteReport; i: 
                         {is.title}
                       </span>
                       <span className="tabular block text-[13px] text-muted-foreground">{t.health.issueLine(f.num(is.count), f.num(is.userCount), f.ago(is.lastSeen))}</span>
+                      {clicks > 0 ? <span className="block text-[13px] text-muted-foreground">{t.health.googleOnPage(f.num(clicks))}</span> : null}
                     </span>
                   </a>
                 </li>

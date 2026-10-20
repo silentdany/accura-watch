@@ -4,7 +4,32 @@ import { useState } from "react";
 import { createTokenAction, disconnectIntegrationAction, refreshOpenSeoUsageAction, saveIntegrationAction } from "@/app/actions";
 import { useI18n } from "@/i18n/client";
 import type { OpenSeoUsage } from "@/lib/providers/openseo";
+import type { SeoChanges } from "@/lib/metrics";
 import { ActionForm, CopyField, Feedback, SubmitButton } from "./forms";
+
+function seoChangeLine(
+  changes: SeoChanges,
+  copy: {
+    unchanged: string;
+    moved: (detail: string) => string;
+    movedSite: (name: string, bits: string) => string;
+    keywordsDelta: (n: string) => string;
+    linksDelta: (n: string) => string;
+  },
+  f: { num: (n: number) => string },
+): string {
+  if (!changes.moved.length) return copy.unchanged;
+  const sign = (n: number) => (n > 0 ? `+${f.num(n)}` : `−${f.num(-n)}`);
+  const detail = changes.moved
+    .map((move) => {
+      const bits: string[] = [];
+      if (move.keywords) bits.push(copy.keywordsDelta(sign(move.keywords.to - move.keywords.from)));
+      if (move.referringDomains) bits.push(copy.linksDelta(sign(move.referringDomains.to - move.referringDomains.from)));
+      return copy.movedSite(move.name, bits.join(", "));
+    })
+    .join(" ; ");
+  return copy.moved(detail);
+}
 
 function Field({ label, children, hint, wide }: { label: string; children: React.ReactNode; hint?: React.ReactNode; wide?: boolean }) {
   return (
@@ -24,12 +49,14 @@ export function IntegrationForm({
   connected,
   config,
   usage,
+  seoChanges,
 }: {
   provider: ProviderId;
   name: string;
   connected: boolean;
   config: Record<string, unknown>;
   usage?: OpenSeoUsage | null;
+  seoChanges?: SeoChanges | null;
 }) {
   const { t, f, locale } = useI18n();
   const s = t.settings;
@@ -95,6 +122,7 @@ export function IntegrationForm({
               ) : (
                 <p className="mt-3 text-[13px] text-muted-foreground">{s.openseo.noCalls}</p>
               )}
+              {seoChanges?.comparable ? <p className="mt-3 text-sm text-muted-foreground">{seoChangeLine(seoChanges, s.openseo, f)}</p> : null}
             </div>
           ) : null}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

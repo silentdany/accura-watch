@@ -1,9 +1,10 @@
 import type { HealthCheck, Insight, Site, SyncState } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { addDays, utcDay, ymd, type Range } from "@/lib/dates";
+import { addDays, parseYmd, utcDay, ymd, type Range } from "@/lib/dates";
 import { pctChange } from "@/lib/format";
 import { RETIRED_SOURCES } from "@/lib/collect/collectors";
 import { DAILY_REFERRER_PREFIX } from "@/lib/collect/store";
+import { splitOrigins } from "@/lib/origins";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -126,6 +127,44 @@ export type Alert = {
   data: { error?: string | null; days?: number; ratio?: number; change?: number; factor?: number | null; count?: number };
 };
 
+/** One chart day on the home page: who carried the visitors, and where those visitors came from. */
+export type DayOrigin = {
+  date: string;
+  /** Site with the most visitors that day. Null when every site was at zero. */
+  site: string | null;
+  siteSlug: string | null;
+  google: number;
+  direct: number;
+  other: number;
+  /** False when that day's referrers were not stored for the lead site. Treat google/direct/other as unknown. */
+  measured: boolean;
+  /** Lead site's Search Console clicks. Null outside its Search Console window (a missing day is not zero). */
+  clicks: number | null;
+};
+
+export type LinkYieldSite = { name: string; slug: string; clicksPerDomain: number };
+
+/** Google clicks over the selected range, divided by the latest referring-domain count. */
+export type LinkYield = {
+  best: LinkYieldSite;
+  /** Another site with a strictly lower ratio. Null when only one site qualifies, or they all tie. */
+  worst: LinkYieldSite | null;
+  sites: number;
+};
+
+export type SeoMove = {
+  name: string;
+  slug: string;
+  keywords: { from: number; to: number } | null;
+  referringDomains: { from: number; to: number } | null;
+};
+
+/** What moved between the last two SEO readings. `comparable` is false until two readings exist. */
+export type SeoChanges = {
+  comparable: boolean;
+  moved: SeoMove[];
+};
+
 export type Overview = {
   range: Range;
   generatedAt: string;
@@ -164,6 +203,9 @@ export type Overview = {
   };
   sites: SiteRow[];
   alerts: Alert[];
+  /** Aligned with the home chart: visitor dates when any site has PostHog, otherwise Search Console dates. */
+  dayMix: DayOrigin[];
+  linkYield: LinkYield | null;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -590,6 +632,8 @@ export async function loadOverview(range: Range, opts: { includeInactive?: boole
     ? dayList(new Date(`${gscRows.map((r) => r.gsc!.endDate).sort().pop()}T00:00:00Z`), range)
     : dayList(addDays(utcDay(), -2), range);
   const lastSync = data.states.reduce<Date | null>((a, s) => (!a || s.lastRunAt > a ? s.lastRunAt : a), null);
+  const chartDates = rows.some((r) => r.posthog) ? dayList(utcDay(), range) : gscDates;
+  const dayMix = await dayMixFor(rows, chartDates);
 
   return {
     range,
@@ -619,7 +663,90 @@ export async function loadOverview(range: Range, opts: { includeInactive?: boole
     },
     sites: rows,
     alerts: computeAlerts(rows),
+    dayMix,
+    linkYield: linkYieldOf(rows),
   };
+}
+
+/** Health checks run about every 4 minutes. One failed check stands for that slice of the day. */
+const HEALTH_SLICE_MINUTES = 4;
+
+function downMinutesFor(checks: { checkedAt: Date; ok: boolean }[], dates: string[]): (number | null)[] {
+  const failed = new Map<string, number>();
+  for (const check of checks) {
+    if (check.ok) continue;
+    const day = ymd(check.checkedAt);
+    failed.set(day, (failed.get(day) ?? 0) + 1);
+  }
+  return dates.map((day) => {
+    const n = failed.get(day) ?? 0;
+    return n > 0 ? n * HEALTH_SLICE_MINUTES : null;
+  });
+}
+
+function clicksOnDay(row: SiteRow, date: string): number | null {
+  if (!row.gsc) return null;
+  const dates = row.gsc.clicksSeries.dates;
+  if (!dates.length || date < dates[0] || date > dates[dates.length - 1]) return null;
+  const i = dates.indexOf(date);
+  return i >= 0 ? (row.gsc.clicksSeries.values[i] ?? 0) : null;
+}
+
+async function dayMixFor(rows: SiteRow[], dates: string[]): Promise<DayOrigin[]> {
+  if (!dates.length) return [];
+  const watched = rows.filter((row) => row.posthog);
+  const metrics = watched.length
+    ? await prisma.dailyMetric.findMany({
+        where: {
+          siteId: { in: watched.map((row) => row.id) },
+          source: "posthog",
+          key: { startsWith: DAILY_REFERRER_PREFIX },
+          date: { gte: parseYmd(dates[0]), lte: parseYmd(dates[dates.length - 1]) },
+        },
+        select: { siteId: true, key: true, date: true, value: true },
+      })
+    : [];
+  const bySiteDate = new Map<string, { key: string; visitors: number }[]>();
+  for (const row of metrics) {
+    const key = `${row.siteId}|${ymd(row.date)}`;
+    const list = bySiteDate.get(key) ?? [];
+    list.push({ key: row.key.slice(DAILY_REFERRER_PREFIX.length), visitors: row.value });
+    bySiteDate.set(key, list);
+  }
+  return dates.map((date) => {
+    let lead: SiteRow | null = null;
+    let leadVisitors = -1;
+    for (const row of watched) {
+      const series = row.posthog!.visitorsSeries;
+      const i = series.dates.indexOf(date);
+      const visitors = i >= 0 ? (series.values[i] ?? 0) : 0;
+      if (visitors > leadVisitors) {
+        lead = row;
+        leadVisitors = visitors;
+      }
+    }
+    if (!lead || leadVisitors <= 0) {
+      return { date, site: null, siteSlug: null, google: 0, direct: 0, other: 0, measured: false, clicks: null };
+    }
+    const refs = bySiteDate.get(`${lead.id}|${date}`);
+    const origins = refs?.length ? splitOrigins(refs) : { google: 0, direct: 0, other: 0 };
+    return { date, site: lead.name, siteSlug: lead.slug, ...origins, measured: !!refs?.length, clicks: clicksOnDay(lead, date) };
+  });
+}
+
+function linkYieldOf(rows: SiteRow[]): LinkYield | null {
+  const scored = rows
+    .filter((row) => row.gsc && (row.seo?.referringDomains ?? 0) > 0)
+    .map((row) => ({
+      name: row.name,
+      slug: row.slug,
+      clicksPerDomain: row.gsc!.clicks / row.seo!.referringDomains!,
+    }))
+    .sort((a, b) => b.clicksPerDomain - a.clicksPerDomain || a.name.localeCompare(b.name));
+  if (!scored.length) return null;
+  const best = scored[0];
+  const last = scored[scored.length - 1];
+  return { best, worst: scored.length >= 2 && last.clicksPerDomain < best.clicksPerDomain ? last : null, sites: scored.length };
 }
 
 // ─── Site report ────────────────────────────────────────────────────────────
@@ -639,6 +766,8 @@ export type SiteReport = SiteRow & {
   sentryIssues: SentryIssueRow[] | null;
   seoDetail: Record<string, unknown> | null;
   latency: Series;
+  /** Minutes offline on each visitor-chart day. Null when the site has no visitor series. A null day had no failed check. */
+  downMinutes: (number | null)[] | null;
   alerts: Alert[];
 };
 
@@ -703,6 +832,50 @@ export async function loadSiteReport(site: Site, range: Range): Promise<SiteRepo
     sentryIssues: ins<{ issues: SentryIssueRow[] }>("sentry", "issues")?.issues ?? null,
     seoDetail: withoutDataForSeo(ins<Record<string, unknown>>("seo", "summary")),
     latency,
+    downMinutes: row.posthog ? downMinutesFor(data.checks, row.posthog.visitorsSeries.dates) : null,
     alerts: computeAlerts([row]),
   };
+}
+
+function pairIfMoved(points: { value: number }[]): { from: number; to: number } | null {
+  if (points.length < 2) return null;
+  const from = points[points.length - 2].value;
+  const to = points[points.length - 1].value;
+  return from === to ? null : { from, to };
+}
+
+/** Latest two organic-keyword and referring-domain readings per active site. Skips a full overview load. */
+export async function seoDeltas(): Promise<SeoChanges> {
+  const sites = await prisma.site.findMany({
+    where: { active: true },
+    select: { id: true, name: true, slug: true },
+    orderBy: { name: "asc" },
+  });
+  if (!sites.length) return { comparable: false, moved: [] };
+  const rows = await prisma.dailyMetric.findMany({
+    where: {
+      siteId: { in: sites.map((site) => site.id) },
+      source: "seo",
+      key: { in: ["organic_keywords", "referring_domains"] },
+    },
+    select: { siteId: true, key: true, date: true, value: true },
+    orderBy: { date: "asc" },
+  });
+  const bySite = new Map<string, { keywords: { value: number }[]; referring: { value: number }[] }>();
+  for (const row of rows) {
+    const bucket = bySite.get(row.siteId) ?? { keywords: [], referring: [] };
+    if (row.key === "organic_keywords") bucket.keywords.push({ value: row.value });
+    else bucket.referring.push({ value: row.value });
+    bySite.set(row.siteId, bucket);
+  }
+  let comparable = false;
+  const moved: SeoMove[] = [];
+  for (const site of sites) {
+    const bucket = bySite.get(site.id) ?? { keywords: [], referring: [] };
+    if (bucket.keywords.length >= 2 || bucket.referring.length >= 2) comparable = true;
+    const keywords = pairIfMoved(bucket.keywords);
+    const referringDomains = pairIfMoved(bucket.referring);
+    if (keywords || referringDomains) moved.push({ name: site.name, slug: site.slug, keywords, referringDomains });
+  }
+  return { comparable, moved };
 }

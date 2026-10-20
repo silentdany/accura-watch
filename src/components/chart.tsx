@@ -28,6 +28,10 @@ type Props = {
   /** Per-day rows under the series values, indexed like `dates`. A day with no rows shows nothing extra. */
   breakdown?: { name: string; value: number }[][];
   breakdownLabel?: string;
+  /** One sentence per date, shown in the tooltip. Null skips that day. */
+  notes?: (string | null)[];
+  /** A short label per date, drawn as a tick on the baseline (downtime). Null skips that day. */
+  marks?: (string | null)[];
 };
 
 function niceTicks(min: number, max: number, count = 4): number[] {
@@ -55,6 +59,8 @@ export function TimeSeriesChart({
   extra = [],
   breakdown,
   breakdownLabel,
+  notes,
+  marks,
 }: Props) {
   const { t, f } = useI18n();
   const wrap = useRef<HTMLDivElement>(null);
@@ -227,6 +233,23 @@ export function TimeSeriesChart({
             );
           })}
 
+          {marks?.map((mark, i) =>
+            mark ? (
+              <line
+                key={`mark-${i}`}
+                x1={x(i)}
+                x2={x(i)}
+                y1={baseY}
+                y2={baseY - (invertY ? -8 : 8)}
+                stroke="var(--c-health)"
+                strokeWidth={2}
+                strokeLinecap="round"
+              >
+                <title>{mark}</title>
+              </line>
+            ) : null,
+          )}
+
           {hover != null && kind !== "bar" ? (
             <g pointerEvents="none">
               <line x1={x(hover)} x2={x(hover)} y1={padT} y2={padT + innerH} stroke="hsl(var(--border-strong))" strokeWidth={1} />
@@ -244,8 +267,8 @@ export function TimeSeriesChart({
 
       {hover != null && hasData ? (
         <div
-          className="pointer-events-none absolute top-1 z-10 w-max min-w-40 max-w-56 rounded-lg bg-popover px-3 py-2 text-[13px] text-popover-foreground shadow-[var(--shadow-lg)]"
-          style={{ left: Math.min(Math.max(x(hover) + 14, 0), Math.max(0, width - 224)) }}
+          className="pointer-events-none absolute top-1 z-10 w-max min-w-40 max-w-[min(20rem,100%)] rounded-lg bg-popover px-3 py-2 text-[13px] text-popover-foreground shadow-[var(--shadow-lg)]"
+          style={{ left: Math.min(Math.max(x(hover) + 14, 0), Math.max(0, width - 320)) }}
         >
           <p className="mb-1 text-xs opacity-70">{fmtDate(dates[hover])}</p>
           {raw.map((s) => (
@@ -257,12 +280,17 @@ export function TimeSeriesChart({
               <span className="tabular font-semibold">{fmt(s.values[hover])}</span>
             </p>
           ))}
-          {extra.map((e) => (
-            <p key={e.name} className="mt-1 flex items-center justify-between gap-4 border-t border-white/15 pt-1">
-              <span className="opacity-85">{e.name}</span>
-              <span className="tabular font-semibold">{fmt(e.values[hover], e.format ?? format)}</span>
-            </p>
-          ))}
+          {extra.map((e) => {
+            const v = e.values[hover];
+            if (v == null || !Number.isFinite(v)) return null;
+            return (
+              <p key={e.name} className="mt-1 flex items-center justify-between gap-4 border-t border-white/15 pt-1">
+                <span className="opacity-85">{e.name}</span>
+                <span className="tabular font-semibold">{fmt(v, e.format ?? format)}</span>
+              </p>
+            );
+          })}
+          {marks?.[hover] ? <p className="mt-1 border-t border-white/15 pt-1 leading-snug">{marks[hover]}</p> : null}
           {breakdown?.[hover]?.length ? (
             <div className="mt-1 border-t border-white/15 pt-1">
               {breakdownLabel ? <p className="mb-0.5 text-xs opacity-70">{breakdownLabel}</p> : null}
@@ -274,6 +302,7 @@ export function TimeSeriesChart({
               ))}
             </div>
           ) : null}
+          {notes?.[hover] ? <p className="mt-1 whitespace-normal border-t border-white/15 pt-1 leading-snug">{notes[hover]}</p> : null}
         </div>
       ) : null}
     </div>

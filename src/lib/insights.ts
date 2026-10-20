@@ -1,6 +1,8 @@
 import type { Site } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { addDays, utcDay, ymd, type Range } from "@/lib/dates";
+import { splitOrigins, type OriginSplit } from "@/lib/origins";
+import { issuesOnPage, pathOf } from "@/lib/paths";
 
 /**
  * Cross-source insights: numbers that only exist once Search Console, PostHog, Sentry,
@@ -45,6 +47,10 @@ export type QueryOpportunity = {
   volume: number | null;
   difficulty: number | null;
   intent: string | null;
+  /** Page where this query brings the most Google clicks, when that pair was stored. */
+  page: string | null;
+  /** Unresolved Sentry issues whose culprit matches `page`. */
+  pageIssues: number;
 };
 
 export type CompetitorRow = {
@@ -73,6 +79,17 @@ export type PageJoin = {
   visitors: number | null;
   /** Search clicks per visitor on that page (both over the last 28 days). */
   searchShare: number | null;
+  /** Query that brings the most Google clicks to this page. */
+  topQuery: { query: string; clicks: number; position: number } | null;
+  /** Referring domain that brings the most visitors to this page. `$direct` is direct traffic. */
+  topReferrer: { key: string; visitors: number } | null;
+  /** Unresolved Sentry issues whose culprit matches this path. */
+  issues: number;
+};
+
+export type Origins28 = OriginSplit & {
+  /** Search Console clicks over the 28 days ending on the last Search Console day. Null without Search Console. */
+  searchClicks: number | null;
 };
 
 export type AuthorityPoint = { date: string; value: number };
@@ -103,6 +120,10 @@ export type SiteInsights = {
   ctrGaps: QueryOpportunity[];
   strikingDistance: QueryOpportunity[];
   pages: PageJoin[];
+  /** Google / direct / other from the stored 28-day top referrers. Null until PostHog has collected them. */
+  origins28: Origins28 | null;
+  /** Days that have a new-referring-domains reading. Days absent from this list were not measured. */
+  newReferringDomains: AuthorityPoint[];
   authority: {
     label: "DR" | "Rank" | "OPR" | null;
     score: AuthorityPoint[];
@@ -319,11 +340,6 @@ const median = (xs: number[]) => {
   return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
 };
 
-const pathOf = (u: string) => {
-  const p = u.replace(/^https?:\/\/[^/]+/, "").split(/[?#]/)[0] || "/";
-  return p.length > 1 ? p.replace(/\/$/, "") : p;
-};
-
 // ─── Loader ─────────────────────────────────────────────────────────────────
 
 type TopRow = { key: string; clicks: number; impressions: number; ctr: number; position: number };
@@ -359,8 +375,9 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
       where: {
         siteId: site.id,
         OR: [
-          { source: "gsc", kind: { in: ["top_queries", "top_pages"] } },
-          { source: "posthog", kind: "top_pages" },
+          { source: "gsc", kind: { in: ["top_queries", "top_pages", "page_queries"] } },
+          { source: "posthog", kind: { in: ["top_pages", "top_referrers", "page_referrers"] } },
+          { source: "sentry", kind: "issues" },
           { source: "seo", kind: { in: ["keywords", "competitors"] } },
         ],
       },
@@ -509,9 +526,29 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
       (r) => [r.keyword.toLowerCase(), r],
     ),
   );
+  type PageQueryRow = { page: string; query: string; clicks: number; position: number };
+  const pageQueries = ins<{ rows?: PageQueryRow[]; byQuery?: { query: string; page: string; clicks: number }[] }>("gsc", "page_queries");
+  const topQueryByPage = new Map<string, { query: string; clicks: number; position: number }>();
+  for (const row of pageQueries?.rows ?? []) {
+    const page = pathOf(row.page);
+    const prev = topQueryByPage.get(page);
+    if (!prev || row.clicks > prev.clicks) topQueryByPage.set(page, { query: row.query, clicks: row.clicks, position: row.position });
+  }
+  const pageByQuery = new Map<string, string>();
+  if (pageQueries?.byQuery?.length) {
+    for (const row of pageQueries.byQuery) pageByQuery.set(row.query.toLowerCase(), pathOf(row.page));
+  } else {
+    for (const [page, row] of topQueryByPage) {
+      const key = row.query.toLowerCase();
+      if (!pageByQuery.has(key)) pageByQuery.set(key, page);
+    }
+  }
+  const issueCulprits = (ins<{ issues?: { culprit: string | null }[] }>("sentry", "issues")?.issues ?? []).map((issue) => issue.culprit);
+
   const opp = (q: TopRow): QueryOpportunity => {
     const expected = typicalCtr(q.position);
     const k = kw.get(q.key.toLowerCase());
+    const page = pageByQuery.get(q.key.toLowerCase()) ?? null;
     return {
       volume: k?.volume ?? null,
       difficulty: k?.difficulty ?? null,
@@ -523,6 +560,8 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
       ctr: q.ctr,
       expectedCtr: expected,
       missedClicks: Math.max(0, Math.round(q.impressions * (expected - q.ctr))),
+      page,
+      pageIssues: page ? issuesOnPage(page, issueCulprits) : 0,
     };
   };
   const ctrGaps = queries
@@ -578,17 +617,43 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
     const k = pathOf(p.key);
     phPages.set(k, (phPages.get(k) ?? 0) + p.visitors);
   }
+  const topRefByPage = new Map<string, { key: string; visitors: number }>();
+  for (const row of ins<{ rows?: { path: string; referrer: string; visitors: number }[] }>("posthog", "page_referrers")?.rows ?? []) {
+    const path = pathOf(row.path);
+    const prev = topRefByPage.get(path);
+    if (!prev || row.visitors > prev.visitors) topRefByPage.set(path, { key: row.referrer, visitors: row.visitors });
+  }
   const pages: PageJoin[] =
     gscPages.size && phPages.size
       ? [...new Set([...gscPages.keys(), ...phPages.keys()])]
           .map((path) => {
             const c = gscPages.get(path) ?? null;
             const v = phPages.get(path) ?? null;
-            return { path, searchClicks: c, visitors: v, searchShare: c != null && v ? c / v : null };
+            return {
+              path,
+              searchClicks: c,
+              visitors: v,
+              searchShare: c != null && v ? c / v : null,
+              topQuery: topQueryByPage.get(path) ?? null,
+              topReferrer: topRefByPage.get(path) ?? null,
+              issues: issuesOnPage(path, issueCulprits),
+            };
           })
           .sort((a, b) => Math.max(b.visitors ?? 0, b.searchClicks ?? 0) - Math.max(a.visitors ?? 0, a.searchClicks ?? 0))
           .slice(0, 10)
       : [];
+
+  const referrerRows = ins<{ rows?: { key: string; visitors: number }[] }>("posthog", "top_referrers")?.rows ?? [];
+  let origins28: Origins28 | null = null;
+  if (referrerRows.length) {
+    let searchClicks: number | null = null;
+    if (hasGsc) {
+      const end = new Date(`${[...clicks.keys()].sort().pop()}T00:00:00Z`);
+      searchClicks = sum(clicks, days(end, 28));
+    }
+    origins28 = { ...splitOrigins(referrerRows), searchClicks };
+  }
+  const newReferringDomains = seoSeries("new_referring_domains");
 
   return {
     searchShare,
@@ -606,6 +671,8 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
     ctrGaps,
     strikingDistance,
     pages,
+    origins28,
+    newReferringDomains,
     authority: { label, score, referringDomains, organicKeywords },
   };
 }

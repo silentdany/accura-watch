@@ -7,6 +7,7 @@ import { listSentryIssues, sentryDailyEvents } from "@/lib/providers/sentry";
 import { fetchDomainSeo } from "@/lib/providers/seo";
 import { checkHealth } from "@/lib/providers/health";
 import { DAILY_REFERRER_PREFIX, replacePrefixedDaily, writeDaily, writeInsight, type Point } from "./store";
+import { pathOf } from "@/lib/paths";
 import { errorMessage } from "@/lib/http";
 
 export type Source = "health" | "gsc" | "posthog" | "sentry" | "seo";
@@ -101,7 +102,41 @@ const gsc: Collector = {
     const meta = { startDate: ymd(topStart), endDate: ymd(topEnd) };
     await writeInsight(site.id, "gsc", "top_queries", { ...meta, rows: queries });
     await writeInsight(site.id, "gsc", "top_pages", { ...meta, rows: pages });
-    return `${rows.length} days, ${queries.length} queries`;
+
+    // Which query lands on which page. Free Search Console call. A failure here must not
+    // throw away the clicks already saved.
+    let pageNote = "";
+    try {
+      const paired = await querySearchAnalytics(property, {
+        startDate: ymd(topStart),
+        endDate: ymd(topEnd),
+        dimensions: ["page", "query"],
+        rowLimit: 500,
+      });
+      const bestByPage = new Map<string, { page: string; query: string; clicks: number; position: number }>();
+      const bestByQuery = new Map<string, { query: string; page: string; clicks: number }>();
+      for (const r of paired) {
+        const query = (r.keys?.[1] ?? "").trim();
+        if (!query) continue;
+        const page = pathOf(r.keys?.[0] ?? "");
+        if (!page) continue;
+        const prevPage = bestByPage.get(page);
+        if (!prevPage || r.clicks > prevPage.clicks || (r.clicks === prevPage.clicks && r.position < prevPage.position)) {
+          bestByPage.set(page, { page, query, clicks: r.clicks, position: r.position });
+        }
+        const prevQuery = bestByQuery.get(query.toLowerCase());
+        if (!prevQuery || r.clicks > prevQuery.clicks) bestByQuery.set(query.toLowerCase(), { query, page, clicks: r.clicks });
+      }
+      await writeInsight(site.id, "gsc", "page_queries", {
+        ...meta,
+        rows: [...bestByPage.values()],
+        byQuery: [...bestByQuery.values()],
+      });
+      pageNote = `, ${bestByPage.size} page queries`;
+    } catch {
+      pageNote = ", page queries skipped";
+    }
+    return `${rows.length} days, ${queries.length} queries${pageNote}`;
   },
 };
 
@@ -289,6 +324,35 @@ const posthog: Collector = {
       lastReferrerDay > today ? lastReferrerDay : today,
       referrerSeries,
     );
+    // Main referrer of each page over 28 days. Same window function as the daily referrers
+    // (LIMIT BY is not supported). Runs after the visitor write, like the daily referrers.
+    const pageReferrers = await runHogql(
+      pid,
+      `SELECT path, referrer, visitors
+       FROM (
+         SELECT path, referrer, visitors, row_number() OVER (PARTITION BY path ORDER BY visitors DESC) AS rn
+         FROM (
+           SELECT properties.$pathname AS path,
+                  if(properties.$referring_domain IS NULL OR properties.$referring_domain = '', '$direct', properties.$referring_domain) AS referrer,
+                  uniq(person_id) AS visitors
+           FROM events
+           WHERE ${monthWhere} AND properties.$pathname IS NOT NULL AND properties.$pathname != ''
+           GROUP BY path, referrer
+         )
+       )
+       WHERE rn = 1
+       ORDER BY visitors DESC
+       LIMIT 25`,
+    );
+    await writeInsight(site.id, "posthog", "page_referrers", {
+      rows: (pageReferrers.results as [string | null, string | null, number][])
+        .filter((row) => row[0])
+        .map(([path, referrer, visitors]) => ({
+          path: pathOf(String(path)),
+          referrer: referrer == null || String(referrer).trim() === "" ? "$direct" : String(referrer).replace(/[\r\n\t]/g, " ").trim().slice(0, 180),
+          visitors: Number(visitors),
+        })),
+    });
     return `${series.visitors.length} days`;
   },
 };

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bug, CheckCircle2, Gauge, OctagonAlert, Search, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Bug, CheckCircle2, Gauge, OctagonAlert, Search, ShieldAlert, TrendingDown, TrendingUp, Users } from "lucide-react";
 import type { SiteReport } from "@/lib/metrics";
 import type { SiteInsights } from "@/lib/insights";
 import type { Range } from "@/lib/dates";
@@ -33,6 +33,10 @@ export async function SummaryTab({ r, i, range }: { r: SiteReport; i: SiteInsigh
     });
   }
   if (r.posthog) lines.push({ icon: <Users className="h-5 w-5 text-muted-foreground" />, text: s.visitors(f.num(r.posthog.visitors), change(r.posthog.visitors, r.posthog.visitorsPrev)) });
+  if (r.health.sslDaysLeft != null && r.health.sslDaysLeft < 14) {
+    const days = r.health.sslDaysLeft;
+    lines.push({ icon: <ShieldAlert className={`h-5 w-5 ${days < 3 ? "text-destructive" : "text-warning"}`} />, text: s.tls(days) });
+  }
   if (i.searchShare && i.searchShare.value <= 1.2) lines.push({ icon: <Search className="h-5 w-5 text-muted-foreground" />, text: s.share(f.pct(i.searchShare.value, 0)) });
   if (r.health.uptime != null && r.health.status !== "down") lines.push({ icon: <CheckCircle2 className="h-5 w-5 text-good" />, text: s.up(f.pct(r.health.uptime, r.health.uptime === 1 ? 0 : 2)) });
   if (r.health.latencyMs != null) {
@@ -43,8 +47,8 @@ export async function SummaryTab({ r, i, range }: { r: SiteReport; i: SiteInsigh
 
   // Top priorities: the biggest wins across both opportunity lists, then the best content gap.
   const actions = [
-    ...i.ctrGaps.map((q) => ({ key: `c-${q.query}`, title: q.query, text: t.opportunities.ctrGapsHint, gain: t.opportunities.ctrGapGain(f.num(q.missedClicks)), n: q.missedClicks, tab: "google" })),
-    ...i.strikingDistance.map((q) => ({ key: `s-${q.query}`, title: q.query, text: t.opportunities.strikingHint, gain: t.opportunities.strikingGain(f.num(q.missedClicks)), n: q.missedClicks, tab: "google" })),
+    ...i.ctrGaps.map((q) => ({ key: `c-${q.query}`, title: q.query, text: t.opportunities.ctrGapsHint, gain: t.opportunities.ctrGapGain(f.num(q.missedClicks)), n: q.missedClicks, tab: "google", pageIssues: q.pageIssues })),
+    ...i.strikingDistance.map((q) => ({ key: `s-${q.query}`, title: q.query, text: t.opportunities.strikingHint, gain: t.opportunities.strikingGain(f.num(q.missedClicks)), n: q.missedClicks, tab: "google", pageIssues: q.pageIssues })),
   ]
     .sort((a, b) => b.n - a.n)
     .slice(0, 3);
@@ -114,7 +118,10 @@ export async function SummaryTab({ r, i, range }: { r: SiteReport; i: SiteInsigh
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center justify-between gap-2">
                         <span className="break-words font-medium">{quote(a.title)}</span>
-                        <Badge tone="good">{a.gain}</Badge>
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {a.pageIssues > 0 ? <Badge tone="warning">{t.opportunities.pageErrors}</Badge> : null}
+                          <Badge tone="good">{a.gain}</Badge>
+                        </span>
                       </span>
                       <span className="mt-0.5 block text-[13px] text-muted-foreground">{a.text}</span>
                     </span>

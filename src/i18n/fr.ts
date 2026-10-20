@@ -231,11 +231,27 @@ export const fr = {
       best: (site: string, change: string) => `Meilleure progression : ${site} (${change}).`,
       up: (pct: string) => `en hausse de ${pct}`,
       down: (pct: string) => `en baisse de ${pct}`,
+      tls: (site: string, days: number) =>
+        days < 0
+          ? `Le certificat de ${site} est expiré.`
+          : days === 0
+            ? `Le certificat de ${site} expire aujourd'hui.`
+            : `Le certificat de ${site} expire dans ${days} jour${days > 1 ? "s" : ""}.`,
+      linkYield: (site: string, n: string) => `${site} reçoit le plus de visites Google par site qui fait un lien (${n}).`,
+      linkYieldBoth: (best: string, bestN: string, worst: string, worstN: string) =>
+        `${best} reçoit le plus de visites Google par site qui fait un lien (${bestN}). ${worst} en reçoit le moins (${worstN}).`,
+      linkYieldTied: "Tes sites reçoivent à peu près autant de visites Google par site qui fait un lien.",
+      dayLead: (site: string, google: string, direct: string, other: string) =>
+        `Surtout ${site} : ${google} via Google, ${direct} en accès direct, ${other} ailleurs.`,
+      daySite: (site: string) => `Surtout ${site}.`,
+      dayGap: (clicks: string, seen: string) => `Google a compté ${clicks} clics, on en voit ${seen} parmi les visiteurs.`,
+      dayOrigins: "Sources principales du jour.",
     },
     chartTitle: "Visites et visiteurs, tous sites",
-    chartHint: "Chaque courbe est ramenée à sa moyenne (100 = un jour moyen). Survole pour les vrais chiffres.",
+    chartHint: "Chaque courbe est ramenée à sa moyenne (100 = un jour moyen). Survole un jour pour les vrais chiffres, le site qui les porte, et d'où viennent ses visiteurs.",
     chartClicksTitle: "Visites depuis Google, tous sites",
     chartVisitorsTitle: "Visiteurs, tous sites",
+    chartVisitorsHint: "Chaque jour, le total de tes sites. Survole un jour pour voir quel site porte le chiffre, et d'où viennent ses visiteurs.",
     chartHintSingle: "Chaque jour, le total de tes sites",
     seoTitle: "SEO, tous sites",
     seoHint: "Mots-clés et sites qui font un lien vers toi. Un jour sans mesure garde la valeur précédente. 100 = la moyenne de la période.",
@@ -286,6 +302,8 @@ export const fr = {
       slow: "lent",
       issues: (n: string) => `${n} bug${n === "1" ? "" : "s"} à corriger.`,
       noIssues: "Aucun bug en attente.",
+      tls: (days: number) =>
+        days < 0 ? "Le certificat est expiré." : days === 0 ? "Le certificat expire aujourd'hui." : `Le certificat expire dans ${days} jour${days > 1 ? "s" : ""}.`,
     },
     noticed: "Ce qu'on a remarqué",
     noticedHint: "Des liens repérés automatiquement entre tes différentes données.",
@@ -306,6 +324,7 @@ export const fr = {
     vsPrev28: "28 derniers jours, comparés aux 28 d'avant",
     noQueries: "Pas encore de recherches.",
     noPages: "Pas encore de pages.",
+    newSites: "Nouveaux sites",
     intentTitle: "Pourquoi les gens te cherchent",
     intentHint: "Visites Google selon l'intention de la recherche",
     intents: {
@@ -329,10 +348,11 @@ export const fr = {
     volume: (n: string) => `${n} recherches/mois`,
     difficulty: (n: number) => `difficulté ${n}/100`,
     nothing: "Rien de flagrant ici.",
+    pageErrors: "La page cible a des erreurs",
   },
   visitors: {
     chartTitle: "Visiteurs et pages vues",
-    chartHint: "Chaque jour. Un navigateur qui ne fait qu'ouvrir une page dans beaucoup de pays est laissé de côté. Survole un jour pour voir d'où viennent les visiteurs.",
+    chartHint: "Chaque jour. Un navigateur qui ne fait qu'ouvrir une page dans beaucoup de pays est laissé de côté. Survole un jour pour voir d'où viennent les visiteurs. Un trait en bas veut dire que le site a été hors ligne.",
     thatDay: "D'où ils viennent",
     topPages: "Pages les plus visitées",
     referrers: "D'où viennent tes visiteurs",
@@ -345,6 +365,18 @@ export const fr = {
     fromGoogle: "Via Google",
     notTopSearch: "hors top Google",
     noVisitorsTracked: "aucun visiteur mesuré",
+    originsTitle: "D'où viennent les visiteurs",
+    originsHint: "Les sources les plus fréquentes sur 28 jours, regroupées.",
+    originsGoogle: "Google",
+    originsDirect: "Accès direct",
+    originsOther: "Ailleurs",
+    originsCompare: (clicks: string, seen: string) => `Sur ces 28 jours, Google a compté ${clicks} clics, et on en voit ${seen} parmi ces visiteurs.`,
+    originsMain: "Ce sont les origines principales : seules les sources les plus fréquentes sont gardées.",
+    topQuery: (query: string) => `La recherche ${query} amène le plus de visites Google.`,
+    topReferrer: (name: string) => `La plupart arrivent depuis ${name}.`,
+    pageIssues: (n: string) => `${n} bug${n === "1" ? "" : "s"} sur cette page.`,
+    almostNoGoogle: "Presque personne ne vient de Google.",
+    downMark: (min: string) => `Hors ligne environ ${min} min`,
   },
   health: {
     latencyTitle: "Temps de réponse",
@@ -357,6 +389,7 @@ export const fr = {
     issuesTitle: "Bugs à corriger",
     noIssues: "Aucun bug en attente.",
     issueLine: (ev: string, users: string, ago: string) => `${ev} fois · ${users} personnes · ${ago}`,
+    googleOnPage: (n: string) => `${n} visites Google sur cette page`,
     tlsDays: (n: number) => `expire dans ${n} j`,
   },
   seo: {
@@ -509,6 +542,11 @@ export const fr = {
       reserved: "en cours",
       costUnknown: "coût non lu",
       toolLabel: (tool: string) => (tool === "get_backlinks_overview" ? "Liens" : tool === "get_domain_overview" ? "Aperçu du domaine" : tool),
+      unchanged: "Depuis le relevé précédent, les mots-clés et les sites référents n'ont pas bougé.",
+      moved: (detail: string) => `Depuis le relevé précédent : ${detail}.`,
+      movedSite: (name: string, bits: string) => `${name}, ${bits}`,
+      keywordsDelta: (n: string) => `${n} mots-clés`,
+      linksDelta: (n: string) => `${n} sites référents`,
     },
     prefsTitle: "Préférences",
     language: "Langue",

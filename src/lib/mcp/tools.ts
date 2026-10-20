@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { addDays, parseRange, utcDay, ymd } from "@/lib/dates";
-import { loadOverview, loadSiteReport, presentSync } from "@/lib/metrics";
+import { loadOverview, loadSiteReport, presentSync, seoDeltas } from "@/lib/metrics";
 import { loadSiteInsights } from "@/lib/insights";
 import {
   autoMatchSites,
@@ -61,7 +61,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_overview",
     title: "Portfolio overview",
     description:
-      "At-a-glance KPIs for every watched site: Search Console clicks/impressions/CTR/position, PostHog visitors, Sentry issues & error events, uptime/latency/TLS, domain SEO (rank, referring domains, organic keywords) — each with previous-period comparison — plus portfolio totals and active alerts. `freshness` gives the last successful collection time per source (Search Console ~6 h, PostHog ~2 h, Sentry ~1 h, uptime ~4 min): always quote it next to the numbers, they are not equally recent. Start here.",
+      "At-a-glance KPIs for every watched site: Search Console clicks/impressions/CTR/position, PostHog visitors, Sentry issues & error events, uptime/latency/TLS, domain SEO (rank, referring domains, organic keywords) — each with previous-period comparison — plus portfolio totals and active alerts. `dayMix` is one row per home-chart day: the site with the most visitors, its Google / direct / other counts from that day's main referrers (`measured` is false when those referrers were not stored), and that site's Search Console clicks (`clicks` is null outside the Search Console window, not zero). `linkYield` is Google clicks in the selected range per referring domain: the strongest site, and the weakest when another site is strictly lower. `freshness` gives the last successful collection time per source (Search Console ~6 h, PostHog ~2 h, Sentry ~1 h, uptime ~4 min): always quote it next to the numbers, they are not equally recent. Start here.",
     input: z.object({ range: rangeArg, include_series: z.boolean().optional().describe("Include daily series (bigger output). Default false.") }),
     annotations: { readOnlyHint: true },
     async handler({ range, include_series }) {
@@ -80,7 +80,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_site_report",
     title: "Site report",
     description:
-      "Full report for one site: KPI summary with deltas and daily series, top Search Console queries & pages (with previous-period clicks/position), PostHog top pages & referrers, daily top referring domains aligned with the visitor series (`posthogReferrersByDay`, empty until the next PostHog collect). PostHog visitor counts skip a browser on a day when every visit from it was a single page across many countries. Also top unresolved Sentry issues, uptime/latency, domain SEO detail and alerts.",
+      "Full report for one site: KPI summary with deltas and daily series, top Search Console queries & pages (with previous-period clicks/position), PostHog top pages & referrers, daily top referring domains aligned with the visitor series (`posthogReferrersByDay`, empty until the next PostHog collect). PostHog visitor counts skip a browser on a day when every visit from it was a single page across many countries. `downMinutes` is minutes offline on each visitor-chart day (failed health checks × 4); null means no failed check that day. Also top unresolved Sentry issues, uptime/latency, domain SEO detail and alerts.",
     input: z.object({ site: siteArg, range: rangeArg }),
     annotations: { readOnlyHint: true },
     async handler({ site, range }) {
@@ -91,7 +91,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_site_insights",
     title: "Site insights",
     description:
-      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, estimated organic traffic vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), new referring domains → clicks (weekly, 0–8 week lag), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20) with volume/difficulty/intent, share of voice, clicks by search intent, per-page search share, organic competitors with traffic calibrated on this site's real-vs-estimated ratio, content gaps, backlink velocity and authority history. Each correlation carries its raw daily or weekly series for charting.",
+      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, estimated organic traffic vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), new referring domains → clicks (weekly, 0–8 week lag), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20) with volume/difficulty/intent. Each opportunity names its target page and how many unresolved Sentry issues match that page, when the page+query pair has been collected. Share of voice, clicks by search intent, per-page search share plus the top Google query, the main referrer and matching Sentry issues. `origins28` buckets the stored 28-day top referrers into Google, direct and other, next to Search Console clicks over the same 28 days (not the selected range). `newReferringDomains` lists only days that were measured. Also organic competitors with traffic calibrated on this site's real-vs-estimated ratio, content gaps, backlink velocity and authority history. Each correlation carries its raw daily or weekly series for charting.",
     input: z.object({ site: siteArg, range: rangeArg }),
     annotations: { readOnlyHint: true },
     async handler({ site, range }) {
@@ -334,12 +334,13 @@ export const TOOLS: ToolDef[] = [
     name: "get_openseo_usage",
     title: "OpenSEO usage and monthly cap",
     description:
-      "Month-to-date OpenSEO spend in USD (1,000 credits = $1), the optional monthly cap, the account balance last read from whoami, and recent calls. Secrets are never returned. refresh=true reads the balance again (free, no research charge).",
+      "Month-to-date OpenSEO spend in USD (1,000 credits = $1), the optional monthly cap, the account balance last read from whoami, and recent calls. `changes` names active sites whose organic keywords or referring domains moved since the previous reading. `changes.comparable` is false until two readings exist — do not say the numbers are unchanged in that case. Secrets are never returned. refresh=true reads the balance again (free, no research charge).",
     input: z.object({ refresh: z.boolean().optional().describe("Read the account balance from OpenSEO now") }),
     annotations: { readOnlyHint: false, openWorldHint: true, idempotentHint: true },
     async handler({ refresh }) {
       if (refresh) await refreshOpenSeoBalance();
-      return getOpenSeoUsage();
+      const [usage, changes] = await Promise.all([getOpenSeoUsage(), seoDeltas()]);
+      return { ...usage, changes };
     },
   }),
 ];

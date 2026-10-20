@@ -13,6 +13,7 @@ export async function GoogleTab({ r, i, range, syncError }: { r: SiteReport; i: 
   const g = r.gsc;
   const vs = t.period.vsPrevious(range);
   const intents = t.google.intents as Record<string, string>;
+  const newSites = new Map(i.newReferringDomains.map((point) => [point.date, point.value]));
 
   return (
     <div className="flex flex-col gap-6">
@@ -54,6 +55,10 @@ export async function GoogleTab({ r, i, range, syncError }: { r: SiteReport; i: 
                   name: t.metrics.ctr.label,
                   format: "pct",
                   values: g.clicksSeries.values.map((c, k) => (g.impressionsSeries.values[k] ? c / g.impressionsSeries.values[k] : null)),
+                },
+                {
+                  name: t.google.newSites,
+                  values: g.clicksSeries.dates.map((date) => (newSites.has(date) ? newSites.get(date)! : null)),
                 },
               ]}
               indexed

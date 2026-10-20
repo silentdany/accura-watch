@@ -3,6 +3,7 @@ import { CheckCircle2, Circle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { integrationStatuses } from "@/lib/integrations";
 import { getOpenSeoUsage } from "@/lib/providers/openseo";
+import { seoDeltas } from "@/lib/metrics";
 import { googleOAuthApp, googleRedirectUri } from "@/lib/providers/google";
 import { TOOLS } from "@/lib/mcp/tools";
 import { revokeOauthGrantAction, revokeTokenAction } from "@/app/actions";
@@ -30,13 +31,14 @@ const DOT: Record<string, string> = {
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const [{ t, f, locale }, theme, integrations, tokens, grants, openseoUsage] = await Promise.all([
+  const [{ t, f, locale }, theme, integrations, tokens, grants, openseoUsage, seoChanges] = await Promise.all([
     getI18n(),
     getTheme(),
     integrationStatuses(),
     prisma.apiToken.findMany({ orderBy: { createdAt: "desc" } }),
     listOauthGrants(),
     getOpenSeoUsage(),
+    seoDeltas(),
   ]);
   const s = t.settings;
   const oauthApp = googleOAuthApp();
@@ -114,6 +116,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                     connected={i.source === "database"}
                     config={i.config}
                     usage={i.id === "openseo" ? openseoUsage : null}
+                    seoChanges={i.id === "openseo" ? seoChanges : null}
                   />
                 </div>
               </div>

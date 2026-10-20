@@ -173,7 +173,10 @@ export async function OpportunitiesCard({ ctrGaps, striking }: { ctrGaps: QueryO
             <li key={q.query} className="rounded-xl border border-border p-3">
               <p className="flex items-start justify-between gap-3">
                 <span className="min-w-0 break-words font-medium">{q.query}</span>
-                <Badge tone="good">{gain(q)}</Badge>
+                <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                  {q.pageIssues > 0 ? <Badge tone="warning">{o.pageErrors}</Badge> : null}
+                  <Badge tone="good">{gain(q)}</Badge>
+                </span>
               </p>
               <p className="mt-1 text-[13px] text-muted-foreground">{line(q)}</p>
               {kwMeta(q, t, f) ? <p className="text-[13px] text-subtle">{kwMeta(q, t, f)}</p> : null}
