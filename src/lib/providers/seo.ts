@@ -3,13 +3,16 @@ import {
   getAhrefsCreds,
   getDataForSeoCreds,
   getOpenPageRankCreds,
+  getOpenSeoCreds,
   type DataForSeoCreds,
 } from "@/lib/integrations";
+import { collectOpenSeo } from "@/lib/providers/openseo";
 
 /**
- * Ahrefs-style domain data without an Ahrefs plan:
- * - DataForSEO (pay-as-you-go, ~$0.01–0.03 per call): Labs domain overview + Backlinks summary.
- *   This is the same data backend OpenSEO uses.
+ * Domain SEO, cheapest source first:
+ * - OpenSEO hosted account when connected (one overview + one backlink summary,
+ *   stopped by the monthly cap). Direct DataForSEO calls are skipped then.
+ * - DataForSEO (pay-as-you-go) when OpenSEO is not connected.
  * - Open PageRank (free): 0–10 authority score.
  * - Ahrefs free Domain Rating endpoint (free APIv3 key, no API units).
  */
@@ -55,20 +58,23 @@ async function dfsRaw<T>(c: DataForSeoCreds, path: string, body: unknown): Promi
 export type DomainSeo = {
   domain: string;
   organic: {
-    keywords: number;
-    etv: number;
-    top3: number;
-    top10: number;
-    trafficCost: number;
+    keywords: number | null;
+    etv: number | null;
+    top3: number | null;
+    top10: number | null;
+    trafficCost: number | null;
   } | null;
   backlinks: {
-    rank: number;
-    backlinks: number;
-    referringDomains: number;
-    referringMainDomains: number;
+    /** Null from OpenSEO: their rank is not on the 0–100 scale this chart uses. */
+    rank: number | null;
+    backlinks: number | null;
+    referringDomains: number | null;
+    referringMainDomains: number | null;
     spamScore: number | null;
     brokenBacklinks: number | null;
   } | null;
+  /** Daily new/lost series included in an OpenSEO backlinks overview. Empty otherwise. */
+  backlinkDays: BacklinkDay[];
   openPageRank: { score: number; globalRank: number | null } | null;
   ahrefs: { domainRating: number } | null;
   cost: number;
@@ -179,12 +185,31 @@ async function ahrefsDomainRating(apiKey: string, domain: string) {
 }
 
 export async function fetchDomainSeo(domain: string): Promise<DomainSeo> {
-  const [dfsCreds, opr, ahrefs] = await Promise.all([getDataForSeoCreds(), getOpenPageRankCreds(), getAhrefsCreds()]);
-  if (!dfsCreds && !opr && !ahrefs) throw new Error("No SEO data provider connected (DataForSEO, Open PageRank or Ahrefs)");
+  const [openseo, dfsCreds, opr, ahrefs] = await Promise.all([
+    getOpenSeoCreds(),
+    getDataForSeoCreds(),
+    getOpenPageRankCreds(),
+    getAhrefsCreds(),
+  ]);
+  if (!openseo && !dfsCreds && !opr && !ahrefs) {
+    throw new Error("No SEO data provider connected (OpenSEO, DataForSEO, Open PageRank or Ahrefs)");
+  }
 
-  const out: DomainSeo = { domain, organic: null, backlinks: null, openPageRank: null, ahrefs: null, cost: 0, errors: [] };
+  const out: DomainSeo = { domain, organic: null, backlinks: null, backlinkDays: [], openPageRank: null, ahrefs: null, cost: 0, errors: [] };
   const jobs: Promise<void>[] = [];
-  if (dfsCreds) {
+  if (openseo) {
+    jobs.push(
+      collectOpenSeo(domain)
+        .then((r) => {
+          out.organic = r.organic;
+          out.backlinks = r.backlinks;
+          out.backlinkDays = r.backlinkDays;
+          out.cost += r.cost;
+          out.errors.push(...r.errors);
+        })
+        .catch((e) => void out.errors.push(errorMessage(e))),
+    );
+  } else if (dfsCreds) {
     jobs.push(
       organicOverview(dfsCreds, domain)
         .then((r) => {

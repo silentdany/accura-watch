@@ -22,6 +22,7 @@ import { runHogql } from "@/lib/providers/posthog";
 import { listSentryIssues } from "@/lib/providers/sentry";
 import { checkHealth } from "@/lib/providers/health";
 import { fetchDomainSeo } from "@/lib/providers/seo";
+import { getOpenSeoUsage, refreshOpenSeoBalance } from "@/lib/providers/openseo";
 import { normalizeDomain } from "@/lib/domain";
 
 /**
@@ -232,7 +233,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_domain_seo",
     title: "Domain SEO metrics",
     description:
-      "Live Ahrefs-style metrics for ANY domain (competitors too) via DataForSEO, Open PageRank and the free Ahrefs Domain Rating: domain rank (0-100), backlinks, referring domains, organic keywords, estimated organic traffic. Costs a few cents of DataForSEO credit per call.",
+      "Live domain SEO for ANY domain (competitors too). Uses OpenSEO when it is connected (counts toward the monthly cap: one overview and, if the cap allows, one backlink summary), otherwise DataForSEO, plus Open PageRank and the free Ahrefs Domain Rating. Returns organic keywords, estimated traffic, backlinks and referring domains.",
     input: z.object({ domain: z.string() }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     async handler({ domain }) {
@@ -314,11 +315,23 @@ export const TOOLS: ToolDef[] = [
   tool({
     name: "get_integrations",
     title: "Integration status",
-    description: "Which data providers are connected (Google Search Console, PostHog, Sentry, DataForSEO, Open PageRank, Ahrefs). Secrets are never returned.",
+    description: "Which data providers are connected (Google Search Console, PostHog, Sentry, OpenSEO, DataForSEO, Open PageRank, Ahrefs). Secrets are never returned.",
     input: z.object({}),
     annotations: { readOnlyHint: true },
     async handler() {
       return (await integrationStatuses()).map(({ id, label, connected, source, detail }) => ({ id, label, connected, source, detail }));
+    },
+  }),
+  tool({
+    name: "get_openseo_usage",
+    title: "OpenSEO usage and monthly cap",
+    description:
+      "Month-to-date OpenSEO spend in USD (1,000 credits = $1), the optional monthly cap, the account balance last read from whoami, and recent calls. Secrets are never returned. refresh=true reads the balance again (free, no research charge).",
+    input: z.object({ refresh: z.boolean().optional().describe("Read the account balance from OpenSEO now") }),
+    annotations: { readOnlyHint: false, openWorldHint: true, idempotentHint: true },
+    async handler({ refresh }) {
+      if (refresh) await refreshOpenSeoBalance();
+      return getOpenSeoUsage();
     },
   }),
 ];

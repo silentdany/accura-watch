@@ -3,7 +3,7 @@
 **Open-source, MCP-native dashboard for all your sites.** See at a glance, for every site you run:
 
 - **Google Search Console** (priority): clicks, impressions, CTR, average position with period-over-period deltas, top queries and pages, winners and losers
-- **Domain SEO without an Ahrefs plan**: domain rank, backlinks, referring domains, organic keywords and estimated traffic via [DataForSEO](https://dataforseo.com) (pay-as-you-go, the same backend [OpenSEO](https://github.com/every-app/open-seo) uses), plus the free Ahrefs Domain Rating endpoint and a free [Open PageRank](https://www.domcop.com/openpagerank/) score
+- **Domain SEO without an Ahrefs plan**: organic keywords, estimated traffic, backlinks and referring domains via a hosted [OpenSEO](https://openseo.so) account (a monthly credit cap, few calls), or direct [DataForSEO](https://dataforseo.com) when OpenSEO is not connected, plus the free Ahrefs Domain Rating endpoint and a free [Open PageRank](https://www.domcop.com/openpagerank/) score
 - **Analytics** from **PostHog**: visitors, pageviews, top pages and referrers
 - **Health**: uptime, latency, TLS certificate expiry
 - **Sentry**: unresolved issues, error events per day and top issues
@@ -34,7 +34,7 @@ Open http://localhost:3000 and create the owner account. The first sign-up becom
 
 1. **Settings → Google Search Console**: *Connect with Google* (needs `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) or paste a service-account JSON key.
 2. **Sites → Import from Search Console**: tick the properties you want.
-3. **Settings**: add PostHog (personal API key), Sentry (auth token + org), DataForSEO and/or Open PageRank. Click **Auto-match projects** on the Sites page.
+3. **Settings**: add PostHog (personal API key), Sentry (auth token + org), OpenSEO (API key + monthly cap) and/or Open PageRank. Click **Auto-match projects** on the Sites page.
 4. **Settings → MCP & API**: create a token and connect your agent.
 
 ### Upgrading from v0.1 (`Site.config` + `MetricSnapshot`)

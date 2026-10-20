@@ -5,6 +5,7 @@ import { getServerSession } from "@/lib/require-session";
 import { runCollection } from "@/lib/collect";
 import { autoMatchSites, createSite, deleteSite, importFromGsc, updateSite } from "@/lib/sites";
 import { deleteIntegration, saveIntegration, type ProviderId } from "@/lib/integrations";
+import { refreshOpenSeoBalance } from "@/lib/providers/openseo";
 import { createApiToken, revokeApiToken } from "@/lib/api-tokens";
 import { revokeOauthGrant } from "@/lib/oauth/server";
 import { errorMessage } from "@/lib/http";
@@ -116,7 +117,7 @@ export async function autoMatchAction(): Promise<ActionState> {
 export async function saveIntegrationAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return attempt(async () => {
     const provider = field(fd, "provider") as ProviderId;
-    const { t } = await getI18n();
+    const { t, f } = await getI18n();
     switch (provider) {
       case "google": {
         const json = field(fd, "serviceAccount");
@@ -142,6 +143,31 @@ export async function saveIntegrationAction(_: ActionState, fd: FormData): Promi
       case "sentry":
         await saveIntegration("sentry", { org: field(fd, "org") || null, host: field(fd, "host") || "https://sentry.io" }, { token: field(fd, "token") });
         return t.actions.providerSaved("Sentry");
+      case "openseo": {
+        const rawCap = field(fd, "monthlyCapUsd") ?? "";
+        const cap = rawCap ? Number(rawCap.replace(",", ".")) : null;
+        if (rawCap && (cap == null || !Number.isFinite(cap) || cap < 0)) return { ok: false, message: t.actions.invalidCap };
+        const apiKey = (field(fd, "apiKey") ?? "").replace(/^Bearer\s+/i, "");
+        await saveIntegration(
+          "openseo",
+          {
+            locationCode: Number(field(fd, "locationCode")) || 2250,
+            languageCode: field(fd, "languageCode") || "fr",
+            cadenceDays: Math.max(1, Number(field(fd, "cadenceDays")) || 30),
+            monthlyCapUsd: cap,
+          },
+          { apiKey },
+        );
+        try {
+          const usage = await refreshOpenSeoBalance();
+          const left = usage.remainingUsd == null ? null : f.dec(usage.remainingUsd, 2);
+          return left == null ? t.actions.providerSaved("OpenSEO") : t.actions.openseoSaved(left);
+        } catch (e) {
+          const msg = errorMessage(e);
+          if (/rejected the API key|401|403/i.test(msg)) return { ok: false, message: t.actions.openseoKeyRejected };
+          return { ok: true, message: t.actions.openseoSavedNoBalance(msg) };
+        }
+      }
       case "dataforseo":
         await saveIntegration(
           "dataforseo",
@@ -163,6 +189,15 @@ export async function saveIntegrationAction(_: ActionState, fd: FormData): Promi
       default:
         return { ok: false, message: t.actions.unknownProvider };
     }
+  });
+}
+
+export async function refreshOpenSeoUsageAction(): Promise<ActionState> {
+  return attempt(async () => {
+    const usage = await refreshOpenSeoBalance();
+    const { t, f } = await getI18n();
+    if (usage.remainingUsd == null) return t.actions.openseoBalanceUnknown;
+    return t.actions.openseoBalance(f.dec(usage.remainingUsd, 2));
   });
 }
 

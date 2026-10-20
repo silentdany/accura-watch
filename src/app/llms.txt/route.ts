@@ -8,7 +8,7 @@ export function GET() {
   const base = appUrl();
   const body = `# Accura Watch
 
-> Open-source, MCP-native dashboard for a portfolio of websites: Google Search Console, PostHog, Sentry, uptime/TLS and domain SEO (DataForSEO, Open PageRank).
+> Open-source, MCP-native dashboard for a portfolio of websites: Google Search Console, PostHog, Sentry, uptime/TLS and domain SEO (OpenSEO, Open PageRank).
 
 ## Connect an agent
 

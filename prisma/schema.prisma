@@ -167,6 +167,22 @@ model Integration {
   updatedAt DateTime @updatedAt
 }
 
+/// One OpenSEO MCP call. `credits` is the measured drop in the account balance
+/// (1 000 credits = 1 USD). A row with detail "reserved" is a short hold placed
+/// before the call so two collects cannot both slip under the monthly cap.
+model OpenSeoCall {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  domain    String
+  tool      String
+  credits   Int
+  remaining Int?
+  ok        Boolean
+  detail    String?
+
+  @@index([at])
+}
+
 /// Personal access tokens for the MCP server and REST API (sha256-hashed)
 model ApiToken {
   id         String    @id @default(cuid())

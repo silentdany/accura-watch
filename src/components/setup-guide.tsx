@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import type { Locale } from "@/i18n";
 
-type Provider = "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank" | "ahrefs";
+type Provider = "google" | "posthog" | "sentry" | "openseo" | "dataforseo" | "openpagerank" | "ahrefs";
 type Guide = { title: string; steps: React.ReactNode[] };
 
 function A({ href, children }: { href: string; children: React.ReactNode }) {
@@ -100,6 +100,25 @@ function guidesFr(redirectUri: string): Record<Provider, Guide[]> {
           </>,
           <>
             Les jetons d&rsquo;organisation (<C>sntrys_…</C>) ne peuvent pas lire les bugs. Données en Europe : mets <C>https://de.sentry.io</C> comme hôte.
+          </>,
+        ],
+      },
+    ],
+    openseo: [
+      {
+        title: "Clé API",
+        steps: [
+          <>
+            Ouvre <A href="https://app.openseo.so/settings">app.openseo.so → Réglages</A>, puis <b>Clés API</b>, et crée une clé.
+          </>,
+          <>
+            Colle-la ci-dessous. Elle commence par <C>oseo_</C> et ne s&rsquo;affiche qu&rsquo;une fois.
+          </>,
+          <>
+            Indique un plafond en dollars par mois. Watch s&rsquo;arrête quand les appels du mois l&rsquo;atteignent. Le forfait à 10&nbsp;$ inclut environ 10&nbsp;$ de crédits.
+          </>,
+          <>
+            Chaque site ne déclenche qu&rsquo;un aperçu (trafic, mots-clés) et, si le plafond le permet, un résumé des liens. Le rythme par défaut est 30 jours.
           </>,
         ],
       },
@@ -224,6 +243,25 @@ function guidesEn(redirectUri: string): Record<Provider, Guide[]> {
           </>,
           <>
             Organization tokens (<C>sntrys_…</C>) can&rsquo;t read bugs. EU data residency: use <C>https://de.sentry.io</C> as the host.
+          </>,
+        ],
+      },
+    ],
+    openseo: [
+      {
+        title: "API key",
+        steps: [
+          <>
+            Open <A href="https://app.openseo.so/settings">app.openseo.so → Settings</A>, then <b>API keys</b>, and create a key.
+          </>,
+          <>
+            Paste it below. It starts with <C>oseo_</C> and is shown only once.
+          </>,
+          <>
+            Set a monthly dollar cap. Watch stops when this month&rsquo;s calls reach it. The $10 plan includes about $10 of credits.
+          </>,
+          <>
+            Each site triggers one overview (traffic, keywords) and, when the cap allows, one link summary. The default pace is 30 days.
           </>,
         ],
       },

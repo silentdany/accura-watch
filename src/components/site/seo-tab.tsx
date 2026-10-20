@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { SiteReport } from "@/lib/metrics";
 import type { SiteInsights, AuthorityPoint } from "@/lib/insights";
+import { getOpenSeoUsage } from "@/lib/providers/openseo";
 import { getI18n } from "@/i18n/server";
 import { Badge, Card, CardHeader, Delta, Empty, Stat } from "../ui";
 import { Sparkline } from "../sparkline";
@@ -19,7 +20,7 @@ type SeoDetail = {
 const last2 = (pts: AuthorityPoint[]) => [pts.at(-1)?.value ?? null, pts.at(-2)?.value ?? null] as const;
 
 export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
-  const { t, f } = await getI18n();
+  const [{ t, f }, usage] = await Promise.all([getI18n(), getOpenSeoUsage()]);
   const a = i.authority;
   const detail = r.seoDetail as SeoDetail | null;
   const [score, scorePrev] = last2(a.score);
@@ -31,15 +32,34 @@ export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
   const since = a.score[0]?.date ?? a.referringDomains[0]?.date ?? a.organicKeywords[0]?.date;
   const links = i.correlations.filter((c) => c.driver === "links");
   const cal = i.calibration;
+  const priced = (n: number) => f.dec(n, 2);
+  const usageLine = usage.connected
+    ? t.seo.openseoUsage(
+        priced(usage.monthUsd),
+        usage.monthlyCapUsd == null ? null : priced(usage.monthlyCapUsd),
+        usage.remainingUsd == null ? null : priced(usage.remainingUsd),
+      )
+    : null;
 
   if (!detail && !a.score.length && !a.referringDomains.length) {
     return (
       <Card>
         <Empty>
-          {t.seo.noData}{" "}
-          <Link href="/settings#dataforseo" className="link font-medium">
-            {t.seo.connectSeo}
-          </Link>
+          {usageLine ? (
+            <>
+              {usageLine}{" "}
+              <Link href="/settings#openseo" className="link font-medium">
+                {t.seo.openseoSettings}
+              </Link>
+            </>
+          ) : (
+            <>
+              {t.seo.noData}{" "}
+              <Link href="/settings#openseo" className="link font-medium">
+                {t.seo.connectSeo}
+              </Link>
+            </>
+          )}
         </Empty>
       </Card>
     );
@@ -51,11 +71,9 @@ export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
     if (detail.backlinks.spamScore != null) items.push({ label: t.seo.spamScore, value: `${detail.backlinks.spamScore}/100` });
   }
   if (detail?.organic) {
-    items.push(
-      { label: t.seo.top10, value: f.num(detail.organic.top10) },
-      { label: t.metrics.estimated.label, value: `${f.num(detail.organic.etv)}${t.common.perMonth}` },
-      { label: t.seo.trafficValue, value: `${f.num(detail.organic.trafficCost)} $` },
-    );
+    if (detail.organic.top10 != null) items.push({ label: t.seo.top10, value: f.num(detail.organic.top10) });
+    if (detail.organic.etv != null) items.push({ label: t.metrics.estimated.label, value: `${f.num(detail.organic.etv)}${t.common.perMonth}` });
+    if (detail.organic.trafficCost != null) items.push({ label: t.seo.trafficValue, value: `${f.num(detail.organic.trafficCost)} $` });
   }
   if (detail?.openPageRank) {
     items.push({ label: t.seo.oprLabel, value: `${f.dec(detail.openPageRank.score, 1)}/10` });
@@ -64,6 +82,17 @@ export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {usageLine ? (
+        <p className="-mb-2 text-sm text-muted-foreground">
+          {usageLine}{" "}
+          <Link href="/settings#openseo" className="link font-medium">
+            {t.seo.openseoSettings}
+          </Link>
+        </p>
+      ) : null}
+      {detail?.errors?.some((e) => /OpenSEO/i.test(e)) ? (
+        <p className="text-sm text-muted-foreground">{detail.errors.filter((e) => /OpenSEO/i.test(e)).join(" · ")}</p>
+      ) : null}
       {since ? <p className="-mb-2 text-sm text-muted-foreground">{t.seo.authorityHistory(f.dateLong(since))}</p> : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat

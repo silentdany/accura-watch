@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CheckCircle2, Circle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { integrationStatuses } from "@/lib/integrations";
+import { getOpenSeoUsage } from "@/lib/providers/openseo";
 import { googleOAuthApp, googleRedirectUri } from "@/lib/providers/google";
 import { TOOLS } from "@/lib/mcp/tools";
 import { revokeOauthGrantAction, revokeTokenAction } from "@/app/actions";
@@ -22,6 +23,7 @@ const DOT: Record<string, string> = {
   google: "var(--c-gsc)",
   posthog: "var(--c-posthog)",
   sentry: "var(--c-sentry)",
+  openseo: "var(--c-seo)",
   dataforseo: "var(--c-seo)",
   openpagerank: "var(--c-seo)",
   ahrefs: "var(--c-seo)",
@@ -29,12 +31,13 @@ const DOT: Record<string, string> = {
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const [{ t, f, locale }, theme, integrations, tokens, grants] = await Promise.all([
+  const [{ t, f, locale }, theme, integrations, tokens, grants, openseoUsage] = await Promise.all([
     getI18n(),
     getTheme(),
     integrationStatuses(),
     prisma.apiToken.findMany({ orderBy: { createdAt: "desc" } }),
     listOauthGrants(),
+    getOpenSeoUsage(),
   ]);
   const s = t.settings;
   const oauthApp = googleOAuthApp();
@@ -106,7 +109,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <SetupGuide provider={i.id} redirectUri={googleRedirectUri()} locale={locale} title={s.howTo} />
                 {i.id === "google" ? <p className="text-sm font-medium">{s.orServiceAccount}</p> : null}
                 <div className="flex flex-1 flex-col">
-                  <IntegrationForm provider={i.id} name={i.label} connected={i.source === "database"} config={i.config} />
+                  <IntegrationForm
+                    provider={i.id}
+                    name={i.label}
+                    connected={i.source === "database"}
+                    config={i.config}
+                    usage={i.id === "openseo" ? openseoUsage : null}
+                  />
                 </div>
               </div>
             </Card>

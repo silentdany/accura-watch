@@ -5,6 +5,7 @@ import {
   getDataForSeoCreds,
   getGoogleCreds,
   getOpenPageRankCreds,
+  getOpenSeoCreds,
   getPosthogCreds,
   getSentryCreds,
 } from "@/lib/integrations";
@@ -29,10 +30,11 @@ export type CollectTaskResult = {
 };
 
 export async function connectedProviders(): Promise<Connected> {
-  const [google, posthog, sentry, dfs, opr, ahrefs] = await Promise.all([
+  const [google, posthog, sentry, openseo, dfs, opr, ahrefs] = await Promise.all([
     getGoogleCreds(),
     getPosthogCreds(),
     getSentryCreds(),
+    getOpenSeoCreds(),
     getDataForSeoCreds(),
     getOpenPageRankCreds(),
     getAhrefsCreds(),
@@ -41,16 +43,17 @@ export async function connectedProviders(): Promise<Connected> {
     google: !!google,
     posthog: !!posthog,
     sentry: !!sentry,
+    openseo: !!openseo,
     dataforseo: !!dfs,
     openpagerank: !!opr,
     ahrefs: !!ahrefs,
-    seoCadenceDays: dfs?.cadenceDays ?? 7,
+    seoCadenceDays: openseo?.cadenceDays ?? dfs?.cadenceDays ?? 7,
   };
 }
 
 /**
  * Run due collectors for every (site, source) pair and record SyncState.
- * Safe to call often: cadence per source avoids hammering APIs (and paying DataForSEO twice).
+ * Safe to call often: cadence per source avoids hammering APIs (and paying OpenSEO or DataForSEO twice).
  */
 export async function runCollection(opts: CollectOptions = {}): Promise<{
   startedAt: string;

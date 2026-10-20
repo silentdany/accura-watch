@@ -26,13 +26,25 @@ export type DataForSeoCreds = {
 };
 export type OpenPageRankCreds = { apiKey: string };
 export type AhrefsCreds = { apiKey: string };
+export type OpenSeoCreds = {
+  apiKey: string;
+  locationCode: number;
+  languageCode: string;
+  cadenceDays: number;
+  /** Null when the user has not set a monthly dollar cap. */
+  monthlyCapUsd: number | null;
+  projectId: string | null;
+  creditsRemaining: number | null;
+  balanceCheckedAt: string | null;
+};
 
-export type ProviderId = "google" | "posthog" | "sentry" | "dataforseo" | "openpagerank" | "ahrefs";
+export type ProviderId = "google" | "posthog" | "sentry" | "openseo" | "dataforseo" | "openpagerank" | "ahrefs";
 
 export const PROVIDERS: { id: ProviderId; label: string; feeds: string }[] = [
   { id: "google", label: "Google Search Console", feeds: "Clicks, impressions, CTR, position, top queries & pages" },
   { id: "posthog", label: "PostHog", feeds: "Visitors, pageviews, top pages & referrers" },
   { id: "sentry", label: "Sentry", feeds: "Unresolved issues, error events per day" },
+  { id: "openseo", label: "OpenSEO", feeds: "Organic traffic, keywords, backlinks and referring domains" },
   { id: "dataforseo", label: "DataForSEO", feeds: "Domain rank, backlinks, referring domains, organic keywords & traffic" },
   { id: "openpagerank", label: "Open PageRank", feeds: "Free domain authority score (0–10)" },
   { id: "ahrefs", label: "Ahrefs (free)", feeds: "Free Domain Rating (0–100) — no paid plan needed" },
@@ -126,6 +138,39 @@ export async function getDataForSeoCreds(): Promise<DataForSeoCreds | null> {
   };
 }
 
+const finite = (v: unknown): number | null => {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** A stored null means "no cap". The env var applies only when the row never set the field. */
+function monthlyCapUsd(config: Record<string, unknown>): number | null {
+  if ("monthlyCapUsd" in config) {
+    const n = finite(config.monthlyCapUsd);
+    return n != null && n >= 0 ? n : null;
+  }
+  const fromEnv = finite(env("OPENSEO_MONTHLY_CAP_USD"));
+  return fromEnv != null && fromEnv >= 0 ? fromEnv : null;
+}
+
+export async function getOpenSeoCreds(): Promise<OpenSeoCreds | null> {
+  const row = await readRow("openseo");
+  const apiKey = str(row?.secret.apiKey) ?? env("OPENSEO_API_KEY");
+  if (!apiKey) return null;
+  const c = row?.config ?? {};
+  return {
+    apiKey,
+    locationCode: finite(c.locationCode ?? env("OPENSEO_LOCATION_CODE")) ?? 2250,
+    languageCode: str(c.languageCode) ?? env("OPENSEO_LANGUAGE_CODE") ?? "fr",
+    cadenceDays: Math.max(1, finite(c.cadenceDays ?? env("OPENSEO_CADENCE_DAYS")) ?? 30),
+    monthlyCapUsd: monthlyCapUsd(c),
+    projectId: str(c.projectId),
+    creditsRemaining: finite(c.creditsRemaining),
+    balanceCheckedAt: str(c.balanceCheckedAt),
+  };
+}
+
 export async function getAhrefsCreds(): Promise<AhrefsCreds | null> {
   const row = await readRow("ahrefs");
   const apiKey = str(row?.secret.apiKey) ?? env("AHREFS_API_KEY");
@@ -185,10 +230,11 @@ export type IntegrationStatus = {
 export async function integrationStatuses(): Promise<IntegrationStatus[]> {
   const rows = await prisma.integration.findMany();
   const byId = new Map(rows.map((r) => [r.provider, r]));
-  const [google, posthog, sentry, dfs, opr, ahrefs] = await Promise.all([
+  const [google, posthog, sentry, openseo, dfs, opr, ahrefs] = await Promise.all([
     getGoogleCreds(),
     getPosthogCreds(),
     getSentryCreds(),
+    getOpenSeoCreds(),
     getDataForSeoCreds(),
     getOpenPageRankCreds(),
     getAhrefsCreds(),
@@ -201,6 +247,9 @@ export async function integrationStatuses(): Promise<IntegrationStatus[]> {
       : null,
     posthog: posthog ? posthog.host.replace(/^https?:\/\//, "") : null,
     sentry: sentry ? `${sentry.org} · ${sentry.host.replace(/^https?:\/\//, "")}` : null,
+    openseo: openseo
+      ? `every ${openseo.cadenceDays}d · loc ${openseo.locationCode}/${openseo.languageCode}${openseo.monthlyCapUsd != null ? ` · cap $${openseo.monthlyCapUsd}` : ""}`
+      : null,
     dataforseo: dfs
       ? `${dfs.login} · loc ${dfs.locationCode}/${dfs.languageCode} · every ${dfs.cadenceDays}d${dfs.backlinks ? " · backlinks" : ""}`
       : null,
@@ -211,6 +260,7 @@ export async function integrationStatuses(): Promise<IntegrationStatus[]> {
     google: !!google,
     posthog: !!posthog,
     sentry: !!sentry,
+    openseo: !!openseo,
     dataforseo: !!dfs,
     openpagerank: !!opr,
     ahrefs: !!ahrefs,

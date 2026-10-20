@@ -16,6 +16,7 @@ export type Connected = {
   google: boolean;
   posthog: boolean;
   sentry: boolean;
+  openseo: boolean;
   dataforseo: boolean;
   openpagerank: boolean;
   ahrefs: boolean;
@@ -320,11 +321,11 @@ const sentry: Collector = {
 const seo: Collector = {
   source: "seo",
   label: "Domain SEO",
-  cadenceMinutes: (c) => (c.dataforseo ? c.seoCadenceDays * 1440 - 60 : 1440 - 60),
-  skipReason: (_site, c) => (!c.dataforseo && !c.openpagerank && !c.ahrefs ? "No SEO provider connected" : null),
+  cadenceMinutes: (c) => (c.openseo || c.dataforseo ? c.seoCadenceDays * 1440 - 60 : 1440 - 60),
+  skipReason: (_site, c) => (!c.openseo && !c.dataforseo && !c.openpagerank && !c.ahrefs ? "No SEO provider connected" : null),
   async run(site) {
     const data = await fetchDomainSeo(site.domain);
-    if (!data.organic && !data.backlinks && !data.openPageRank && !data.ahrefs) {
+    if (!data.organic && !data.backlinks && !data.backlinkDays.length && !data.openPageRank && !data.ahrefs) {
       throw new Error(data.errors.join(" · ") || "No SEO data returned");
     }
     const date = ymd(utcDay());
@@ -340,10 +341,18 @@ const seo: Collector = {
     put("referring_domains", data.backlinks?.referringDomains);
     put("opr", data.openPageRank?.score);
     put("ahrefs_dr", data.ahrefs?.domainRating);
+    if (data.backlinkDays.length) {
+      const series = (f: (d: (typeof data.backlinkDays)[number]) => number) => data.backlinkDays.map((d) => ({ date: d.date, value: f(d) }));
+      pts.new_backlinks = series((d) => d.newBacklinks);
+      pts.lost_backlinks = series((d) => d.lostBacklinks);
+      pts.new_referring_domains = series((d) => d.newReferringDomains);
+      pts.lost_referring_domains = series((d) => d.lostReferringDomains);
+    }
     await writeDaily(site.id, "seo", pts);
     await writeInsight(site.id, "seo", "summary", { ...data, collectedAt: new Date().toISOString() });
-    if (data.errors.length) return `partial: ${data.errors.join(" · ")}`;
-    return data.cost ? `cost $${data.cost.toFixed(4)}` : undefined;
+    const cost = data.cost ? `cost $${data.cost.toFixed(4)}` : "";
+    if (data.errors.length) return `partial: ${data.errors.join(" · ")}${cost ? ` · ${cost}` : ""}`;
+    return cost || undefined;
   },
 };
 
@@ -351,14 +360,16 @@ const seo: Collector = {
 
 const WEEK = 7 * 1440 - 60;
 const MONTH = 30 * 1440 - 60;
-const needsDfs = (_site: Site, c: Connected) => (!c.dataforseo ? "DataForSEO not connected" : null);
+/** Extra paid calls stay off while OpenSEO is the SEO source, so the $10 credit pool is not spent on history, competitors or keyword volumes. */
+const needsExtraSeo = (_site: Site, c: Connected) =>
+  c.openseo ? "OpenSEO mode: this extra call stays off" : !c.dataforseo ? "DataForSEO not connected" : null;
 const usd = (cost: number) => (cost ? ` · cost $${cost.toFixed(4)}` : "");
 
 const backlinks: Collector = {
   source: "backlinks",
   label: "Backlink history",
   cadenceMinutes: () => WEEK,
-  skipReason: needsDfs,
+  skipReason: needsExtraSeo,
   async run(site, { firstRun }) {
     // First run backfills 16 months (to line up with Search Console history); then a 2-week overlap.
     const { days, cost, daysBack } = await backlinksNewLost(site.domain, firstRun ? 490 : 14);
@@ -377,7 +388,7 @@ const rankHist: Collector = {
   source: "rank_history",
   label: "Ranking history",
   cadenceMinutes: () => MONTH,
-  skipReason: needsDfs,
+  skipReason: needsExtraSeo,
   async run(site, { firstRun }) {
     const { months, cost } = await rankHistory(site.domain, firstRun ? RANK_HISTORY_START : ymd(addDays(utcDay(), -95)));
     const pts = (f: (m: (typeof months)[number]) => number) => months.map((m) => ({ date: m.month, value: f(m) }));
@@ -394,7 +405,7 @@ const competitors: Collector = {
   source: "competitors",
   label: "Competitors",
   cadenceMinutes: () => MONTH,
-  skipReason: needsDfs,
+  skipReason: needsExtraSeo,
   async run(site) {
     const r = await competitorsAndGaps(site.domain);
     await writeInsight(site.id, "seo", "competitors", {
@@ -410,7 +421,8 @@ const keywords: Collector = {
   source: "keywords",
   label: "Keyword metrics",
   cadenceMinutes: () => WEEK,
-  skipReason: (site, c) => (!c.dataforseo ? "DataForSEO not connected" : !site.gscProperty ? "No Search Console property" : null),
+  skipReason: (site, c) =>
+    c.openseo ? "OpenSEO mode: keyword volumes stay off" : !c.dataforseo ? "DataForSEO not connected" : !site.gscProperty ? "No Search Console property" : null,
   async run(site) {
     const top = await prisma.insight.findUnique({ where: { siteId_source_kind: { siteId: site.id, source: "gsc", kind: "top_queries" } } });
     const queries = ((top?.data as { rows?: { key: string }[] } | null)?.rows ?? []).map((r) => r.key);
