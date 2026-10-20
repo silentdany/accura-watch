@@ -16,14 +16,6 @@ export type GoogleCreds =
 
 export type PosthogCreds = { apiKey: string; host: string };
 export type SentryCreds = { token: string; org: string; host: string };
-export type DataForSeoCreds = {
-  login: string;
-  password: string;
-  locationCode: number;
-  languageCode: string;
-  backlinks: boolean;
-  cadenceDays: number;
-};
 export type OpenPageRankCreds = { apiKey: string };
 export type AhrefsCreds = { apiKey: string };
 export type OpenSeoCreds = {
@@ -38,14 +30,13 @@ export type OpenSeoCreds = {
   balanceCheckedAt: string | null;
 };
 
-export type ProviderId = "google" | "posthog" | "sentry" | "openseo" | "dataforseo" | "openpagerank" | "ahrefs";
+export type ProviderId = "google" | "posthog" | "sentry" | "openseo" | "openpagerank" | "ahrefs";
 
 export const PROVIDERS: { id: ProviderId; label: string; feeds: string }[] = [
   { id: "google", label: "Google Search Console", feeds: "Clicks, impressions, CTR, position, top queries & pages" },
   { id: "posthog", label: "PostHog", feeds: "Visitors, pageviews, top pages & referrers" },
   { id: "sentry", label: "Sentry", feeds: "Unresolved issues, error events per day" },
   { id: "openseo", label: "OpenSEO", feeds: "Organic traffic, keywords, backlinks and referring domains" },
-  { id: "dataforseo", label: "DataForSEO", feeds: "Domain rank, backlinks, referring domains, organic keywords & traffic" },
   { id: "openpagerank", label: "Open PageRank", feeds: "Free domain authority score (0–10)" },
   { id: "ahrefs", label: "Ahrefs (free)", feeds: "Free Domain Rating (0–100) — no paid plan needed" },
 ];
@@ -120,22 +111,6 @@ async function discoverSentryOrg(token: string, host: string): Promise<string | 
   }
   sentryOrgCache.set(key, slug);
   return slug;
-}
-
-export async function getDataForSeoCreds(): Promise<DataForSeoCreds | null> {
-  const row = await readRow("dataforseo");
-  const login = str(row?.secret.login) ?? env("DATAFORSEO_LOGIN");
-  const password = str(row?.secret.password) ?? env("DATAFORSEO_PASSWORD");
-  if (!login || !password) return null;
-  const c = row?.config ?? {};
-  return {
-    login,
-    password,
-    locationCode: Number(c.locationCode ?? env("DATAFORSEO_LOCATION_CODE") ?? 2840) || 2840,
-    languageCode: str(c.languageCode) ?? env("DATAFORSEO_LANGUAGE_CODE") ?? "en",
-    backlinks: c.backlinks === undefined ? true : Boolean(c.backlinks),
-    cadenceDays: Math.max(1, Number(c.cadenceDays ?? 7) || 7),
-  };
 }
 
 const finite = (v: unknown): number | null => {
@@ -230,12 +205,11 @@ export type IntegrationStatus = {
 export async function integrationStatuses(): Promise<IntegrationStatus[]> {
   const rows = await prisma.integration.findMany();
   const byId = new Map(rows.map((r) => [r.provider, r]));
-  const [google, posthog, sentry, openseo, dfs, opr, ahrefs] = await Promise.all([
+  const [google, posthog, sentry, openseo, opr, ahrefs] = await Promise.all([
     getGoogleCreds(),
     getPosthogCreds(),
     getSentryCreds(),
     getOpenSeoCreds(),
-    getDataForSeoCreds(),
     getOpenPageRankCreds(),
     getAhrefsCreds(),
   ]);
@@ -250,9 +224,6 @@ export async function integrationStatuses(): Promise<IntegrationStatus[]> {
     openseo: openseo
       ? `every ${openseo.cadenceDays}d · loc ${openseo.locationCode}/${openseo.languageCode}${openseo.monthlyCapUsd != null ? ` · cap $${openseo.monthlyCapUsd}` : ""}`
       : null,
-    dataforseo: dfs
-      ? `${dfs.login} · loc ${dfs.locationCode}/${dfs.languageCode} · every ${dfs.cadenceDays}d${dfs.backlinks ? " · backlinks" : ""}`
-      : null,
     openpagerank: opr ? "API key set" : null,
     ahrefs: ahrefs ? "API key set · Domain Rating by Ahrefs" : null,
   };
@@ -261,7 +232,6 @@ export async function integrationStatuses(): Promise<IntegrationStatus[]> {
     posthog: !!posthog,
     sentry: !!sentry,
     openseo: !!openseo,
-    dataforseo: !!dfs,
     openpagerank: !!opr,
     ahrefs: !!ahrefs,
   };

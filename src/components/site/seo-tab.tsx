@@ -163,7 +163,7 @@ export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
                     <tr key={c.domain} className="border-b border-border last:border-0 hover:bg-card-hover">
                       <td className="max-w-[220px] truncate px-5 py-3 font-medium">{c.domain}</td>
                       <td className="tabular px-3 py-3 text-right text-muted-foreground">{f.num(c.sharedKeywords)}</td>
-                      <td className="tabular px-5 py-3 text-right" title={`DataForSEO · ${f.num(c.etv)}${t.common.perMonth}`}>
+                      <td className="tabular px-5 py-3 text-right" title={`${t.metrics.estimated.label} · ${f.num(c.etv)}${t.common.perMonth}`}>
                         {f.num(c.calibratedTraffic ?? c.etv)}
                         <span className="text-[13px] text-subtle">{t.common.perMonth}</span>
                       </td>
@@ -211,7 +211,11 @@ export async function SeoTab({ r, i }: { r: SiteReport; i: SiteInsights }) {
               </div>
             ))}
           </dl>
-          {detail?.errors?.length ? <p className="border-t border-border px-5 py-3 text-[13px] text-warning [overflow-wrap:anywhere]">{detail.errors.join(" · ")}</p> : null}
+          {detail?.errors?.some((e) => !/dataforseo/i.test(e)) ? (
+            <p className="border-t border-border px-5 py-3 text-[13px] text-warning [overflow-wrap:anywhere]">
+              {detail.errors.filter((e) => !/dataforseo/i.test(e)).join(" · ")}
+            </p>
+          ) : null}
         </Card>
       ) : null}
     </div>

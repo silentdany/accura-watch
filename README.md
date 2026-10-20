@@ -3,7 +3,7 @@
 **Open-source, MCP-native dashboard for all your sites.** See at a glance, for every site you run:
 
 - **Google Search Console** (priority): clicks, impressions, CTR, average position with period-over-period deltas, top queries and pages, winners and losers
-- **Domain SEO without an Ahrefs plan**: organic keywords, estimated traffic, backlinks and referring domains via a hosted [OpenSEO](https://openseo.so) account (a monthly credit cap, few calls), or direct [DataForSEO](https://dataforseo.com) when OpenSEO is not connected, plus the free Ahrefs Domain Rating endpoint and a free [Open PageRank](https://www.domcop.com/openpagerank/) score
+- **Domain SEO without an Ahrefs plan**: organic keywords, estimated traffic, backlinks and referring domains via a hosted [OpenSEO](https://openseo.so) account (a monthly credit cap, few calls), plus the free Ahrefs Domain Rating endpoint and a free [Open PageRank](https://www.domcop.com/openpagerank/) score
 - **Analytics** from **PostHog**: visitors, pageviews, top pages and referrers
 - **Health**: uptime, latency, TLS certificate expiry
 - **Sentry**: unresolved issues, error events per day and top issues
@@ -49,7 +49,7 @@ On Vercel, nothing to do: the build runs `scripts/db-sync.mjs`, which detects th
 
 ## Data collection
 
-`/api/cron/collect` is safe to call as often as you like. Each (site, source) pair has its own cadence, so APIs aren't hammered and DataForSEO isn't paid for twice:
+`/api/cron/collect` is safe to call as often as you like. Each (site, source) pair has its own cadence, so APIs aren't hammered and OpenSEO isn't paid for twice:
 
 | Source | Cadence | Backfill on first sync | Stored |
 |---|---|---|---|
@@ -57,7 +57,7 @@ On Vercel, nothing to do: the build runs `scripts/db-sync.mjs`, which detects th
 | Sentry | ~1 h | 90 days | daily error events, unresolved count, top 10 issues |
 | PostHog | ~2 h | 180 days | daily visitors/pageviews, 7/28/90-day uniques, top pages, referrers |
 | Search Console | ~6 h | 16 months | daily clicks/impressions/position, top 50 queries & pages vs previous 28 days |
-| Domain SEO | every *N* days (default 7) | — | rank, backlinks, referring domains, organic keywords/traffic, OPR |
+| Domain SEO | every *N* days (OpenSEO default 30; daily for the free scores) | — | keywords, estimated traffic, backlinks, referring domains, authority |
 
 **Sync now** buttons (global and per site) and the `sync_now` MCP tool bypass the cadence.
 
@@ -68,7 +68,7 @@ On Vercel, nothing to do: the build runs `scripts/db-sync.mjs`, which detects th
 | Google Search Console | OAuth (recommended) or service account (JSON key in Settings, or `GSC_SERVICE_ACCOUNT_JSON` / `GSC_CLIENT_EMAIL` + `GSC_PRIVATE_KEY`; any key formatting is accepted) | OAuth sees every property on your account. With a service account, add its email as a user on each property. |
 | PostHog | Personal API key (`project:read`, `query:read`) + US/EU host | Uses HogQL. If one project tracks several sites, set the site's `$host` filter. |
 | Sentry | **User** auth token (`org:read`, `project:read`, `event:read`) + optional org slug | Without an org slug, the token's first organization is used. `https://de.sentry.io` for EU, or your self-hosted URL. |
-| DataForSEO | API login and password | Labs domain overview + Backlinks summary cost about $0.02–0.05 per site per refresh. The location/language codes set the market for keyword data. |
+| OpenSEO | API key (`oseo_…`) and an optional monthly USD cap | One domain overview and one backlink summary per site per period. 1,000 credits = $1. |
 | Open PageRank | Free API key | 0–10 authority score. |
 | Ahrefs (free) | Free APIv3 key | Domain Rating via `/v3/public/domain-rating-free` (no API units). Shown as **DR**, preferred over other authority scores. |
 
@@ -119,7 +119,7 @@ For those clients, `…/api/mcp?key=aw_xxx` also works. Keep that URL private. O
 ## Project layout
 
 ```
-src/lib/providers/   API clients: google (GSC + OAuth), posthog, sentry, seo (DataForSEO, OPR), health
+src/lib/providers/   API clients: google (GSC + OAuth), posthog, sentry, seo (OpenSEO, OPR, Ahrefs), health
 src/lib/collect/     collectors + scheduler (cadence, SyncState, backfill)
 src/lib/metrics.ts   read model: overview, site report, alerts (shared by UI + MCP)
 src/lib/sites.ts     site CRUD, GSC import, auto-matching

@@ -1,10 +1,20 @@
 import Link from "next/link";
 import { ArrowUpRight, Pin } from "lucide-react";
-import type { Alert, SiteRow } from "@/lib/metrics";
+import type { Alert, Series, SiteRow } from "@/lib/metrics";
+import { authority } from "@/lib/format";
 import { siteVerdict, VERDICT_TONE } from "@/lib/verdict";
 import { getI18n } from "@/i18n/server";
 import { Badge, Delta, Favicon, StatusBadge } from "./ui";
 import { Sparkline } from "./sparkline";
+
+function onDates(series: Series | null | undefined, dates: string[]): (number | null)[] {
+  const map = new Map(series?.dates.map((d, i) => [d, series.values[i]]) ?? []);
+  return dates.map((d) => {
+    if (!map.has(d)) return null;
+    const v = map.get(d)!;
+    return Number.isFinite(v) ? v : null;
+  });
+}
 
 function Metric({ label, value, delta, muted }: { label: string; value: React.ReactNode; delta?: React.ReactNode; muted?: boolean }) {
   return (
@@ -20,8 +30,19 @@ export async function SiteCard({ row, alerts }: { row: SiteRow; alerts: Alert[] 
   const { t, f } = await getI18n();
   const verdict = siteVerdict(row, alerts);
   const na = (mapped: boolean) => <span className="text-sm font-normal">{mapped ? t.siteCard.waiting : t.siteCard.notConnected}</span>;
-  const trend = row.gsc?.clicksSeries.values ?? row.posthog?.visitorsSeries.values ?? null;
-  const trendColor = row.gsc ? "var(--c-gsc)" : "var(--c-posthog)";
+  const dates = row.posthog?.visitorsSeries.dates ?? row.gsc?.clicksSeries.dates ?? [];
+  const clicks = row.gsc ? onDates(row.gsc.clicksSeries, dates) : null;
+  const visitors = row.posthog ? onDates(row.posthog.visitorsSeries, dates) : null;
+  const trend = clicks ?? visitors;
+  const trendColor = clicks ? "var(--c-gsc)" : "var(--c-posthog)";
+  const trendLabel = clicks && visitors ? `${t.siteCard.visits} · ${t.siteCard.visitors}` : clicks ? t.siteCard.visits : t.siteCard.visitors;
+  const auth = authority(row.seo);
+  const seoBits = [
+    row.seo?.organicKeywords != null ? `${f.num(row.seo.organicKeywords)} ${t.metrics.keywords.label.toLowerCase()}` : null,
+    row.seo?.referringDomains != null ? `${f.num(row.seo.referringDomains)} ${t.metrics.referringDomains.label.toLowerCase()}` : null,
+    row.seo?.organicEtv != null ? `${f.num(row.seo.organicEtv)}${t.common.perMonth}` : null,
+    auth ? (auth.label === "DR" ? `DR ${auth.text}` : auth.label === "OPR" ? `OPR ${auth.text}` : auth.text) : null,
+  ].filter((x): x is string => !!x);
 
   return (
     <Link
@@ -67,9 +88,11 @@ export async function SiteCard({ row, alerts }: { row: SiteRow; alerts: Alert[] 
         />
       </div>
 
+      {seoBits.length ? <p className="text-[13px] leading-snug text-muted-foreground">{seoBits.join(" · ")}</p> : null}
+
       {trend ? (
         <div className="-mx-1 mt-auto">
-          <Sparkline values={trend} color={trendColor} height={44} fluid label={row.gsc ? t.siteCard.visits : t.siteCard.visitors} />
+          <Sparkline values={trend} companion={clicks && visitors ? visitors : undefined} color={trendColor} height={44} fluid label={trendLabel} />
         </div>
       ) : null}
     </Link>

@@ -2,14 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { errorMessage, mapLimit } from "@/lib/http";
 import {
   getAhrefsCreds,
-  getDataForSeoCreds,
   getGoogleCreds,
   getOpenPageRankCreds,
   getOpenSeoCreds,
   getPosthogCreds,
   getSentryCreds,
 } from "@/lib/integrations";
-import { COLLECTORS, SOURCES, type Connected, type Source } from "./collectors";
+import { COLLECTORS, RETIRED_SOURCES, SOURCES, type Connected, type Source } from "./collectors";
 
 export { SOURCES, type Source } from "./collectors";
 
@@ -30,12 +29,11 @@ export type CollectTaskResult = {
 };
 
 export async function connectedProviders(): Promise<Connected> {
-  const [google, posthog, sentry, openseo, dfs, opr, ahrefs] = await Promise.all([
+  const [google, posthog, sentry, openseo, opr, ahrefs] = await Promise.all([
     getGoogleCreds(),
     getPosthogCreds(),
     getSentryCreds(),
     getOpenSeoCreds(),
-    getDataForSeoCreds(),
     getOpenPageRankCreds(),
     getAhrefsCreds(),
   ]);
@@ -44,16 +42,15 @@ export async function connectedProviders(): Promise<Connected> {
     posthog: !!posthog,
     sentry: !!sentry,
     openseo: !!openseo,
-    dataforseo: !!dfs,
     openpagerank: !!opr,
     ahrefs: !!ahrefs,
-    seoCadenceDays: openseo?.cadenceDays ?? dfs?.cadenceDays ?? 7,
+    seoCadenceDays: openseo?.cadenceDays ?? 30,
   };
 }
 
 /**
  * Run due collectors for every (site, source) pair and record SyncState.
- * Safe to call often: cadence per source avoids hammering APIs (and paying OpenSEO or DataForSEO twice).
+ * Safe to call often: cadence per source avoids hammering APIs (and paying OpenSEO twice).
  */
 export async function runCollection(opts: CollectOptions = {}): Promise<{
   startedAt: string;
@@ -61,6 +58,9 @@ export async function runCollection(opts: CollectOptions = {}): Promise<{
   results: CollectTaskResult[];
 }> {
   const started = Date.now();
+  // Drop the DataForSEO-only collectors and any saved DataForSEO credentials.
+  await prisma.syncState.deleteMany({ where: { source: { in: [...RETIRED_SOURCES] } } });
+  await prisma.integration.deleteMany({ where: { provider: "dataforseo" } });
   const connected = await connectedProviders();
   const sites = await prisma.site.findMany({
     where: opts.siteIds ? { id: { in: opts.siteIds } } : { active: true },

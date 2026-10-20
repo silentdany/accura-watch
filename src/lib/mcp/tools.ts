@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { addDays, parseRange, utcDay, ymd } from "@/lib/dates";
-import { loadOverview, loadSiteReport } from "@/lib/metrics";
+import { loadOverview, loadSiteReport, presentSync } from "@/lib/metrics";
 import { loadSiteInsights } from "@/lib/insights";
 import {
   autoMatchSites,
@@ -91,7 +91,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_site_insights",
     title: "Site insights",
     description:
-      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, DataForSEO traffic estimate vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), new referring domains → clicks (weekly, 0–8 week lag), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20) with volume/difficulty/intent, share of voice, clicks by search intent, per-page search share, organic competitors with traffic calibrated on this site's real-vs-estimated ratio, content gaps, backlink velocity and authority history. Each correlation carries its raw daily or weekly series for charting.",
+      "Cross-source stats for one site: share of visitors coming from Google search, errors per 1k visitors, estimated organic traffic vs real clicks, clicks per referring domain, detrended daily correlations with lag (impressions/position → clicks, clicks → visitors, latency → rankings/visitors, errors → visitors), new referring domains → clicks (weekly, 0–8 week lag), queries with a CTR gap vs the typical CTR at their position, striking-distance queries (positions 11–20) with volume/difficulty/intent, share of voice, clicks by search intent, per-page search share, organic competitors with traffic calibrated on this site's real-vs-estimated ratio, content gaps, backlink velocity and authority history. Each correlation carries its raw daily or weekly series for charting.",
     input: z.object({ site: siteArg, range: rangeArg }),
     annotations: { readOnlyHint: true },
     async handler({ site, range }) {
@@ -132,7 +132,15 @@ export const TOOLS: ToolDef[] = [
         posthogProjectId: s.posthogProjectId,
         posthogHost: s.posthogHost,
         sentryProject: s.sentryProject,
-        sync: s.syncStates.map((st) => ({ source: st.source, ok: st.ok, error: st.error, lastRunAt: st.lastRunAt, lastSuccessAt: st.lastSuccessAt })),
+        sync: presentSync(
+          s.syncStates.map((st) => ({
+            source: st.source,
+            ok: st.ok,
+            error: st.error,
+            lastRunAt: st.lastRunAt.toISOString(),
+            lastSuccessAt: st.lastSuccessAt?.toISOString() ?? null,
+          })),
+        ),
       }));
     },
   }),
@@ -233,7 +241,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_domain_seo",
     title: "Domain SEO metrics",
     description:
-      "Live domain SEO for ANY domain (competitors too). Uses OpenSEO when it is connected (counts toward the monthly cap: one overview and, if the cap allows, one backlink summary), otherwise DataForSEO, plus Open PageRank and the free Ahrefs Domain Rating. Returns organic keywords, estimated traffic, backlinks and referring domains.",
+      "Live domain SEO for ANY domain (competitors too). Uses OpenSEO when it is connected (counts toward the monthly cap: one overview and, if the cap allows, one backlink summary), plus Open PageRank and the free Ahrefs Domain Rating. Returns organic keywords, estimated traffic, backlinks and referring domains.",
     input: z.object({ domain: z.string() }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     async handler({ domain }) {
@@ -315,7 +323,7 @@ export const TOOLS: ToolDef[] = [
   tool({
     name: "get_integrations",
     title: "Integration status",
-    description: "Which data providers are connected (Google Search Console, PostHog, Sentry, OpenSEO, DataForSEO, Open PageRank, Ahrefs). Secrets are never returned.",
+    description: "Which data providers are connected (Google Search Console, PostHog, Sentry, OpenSEO, Open PageRank, Ahrefs). Secrets are never returned.",
     input: z.object({}),
     annotations: { readOnlyHint: true },
     async handler() {

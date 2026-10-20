@@ -16,7 +16,7 @@ function Field({ label, children, hint, wide }: { label: string; children: React
   );
 }
 
-export type ProviderId = "google" | "posthog" | "sentry" | "openseo" | "dataforseo" | "openpagerank" | "ahrefs";
+export type ProviderId = "google" | "posthog" | "sentry" | "openseo" | "openpagerank" | "ahrefs";
 
 export function IntegrationForm({
   provider,
@@ -146,34 +146,6 @@ export function IntegrationForm({
                 <Field label={fl.cadence} hint={fl.openseoCadenceHint}>
                   <input name="cadenceDays" type="number" min={1} defaultValue={c("cadenceDays", "30")} className="input" />
                 </Field>
-              </>
-            ) : null}
-            {provider === "dataforseo" ? (
-              <>
-                <Field label={fl.login}>
-                  <input name="login" type="text" placeholder={keep || "you@example.com"} required={!connected} className="input" autoComplete="off" />
-                </Field>
-                <Field label={fl.password}>
-                  <input name="password" type="password" placeholder={keep} required={!connected} className="input" autoComplete="off" />
-                </Field>
-                <Field label={fl.location} hint={fl.locationHint}>
-                  <input name="locationCode" type="number" defaultValue={c("locationCode", "2250")} className="input" />
-                </Field>
-                <Field label={fl.language} hint={fl.languageHint}>
-                  <input name="languageCode" defaultValue={c("languageCode", "fr")} className="input" />
-                </Field>
-                <Field label={fl.cadence} hint={fl.cadenceHint}>
-                  <input name="cadenceDays" type="number" min={1} defaultValue={c("cadenceDays", "7")} className="input" />
-                </Field>
-                <label className="flex items-center gap-2.5 self-center text-sm">
-                  <input
-                    type="checkbox"
-                    name="backlinks"
-                    defaultChecked={config.backlinks === undefined ? true : Boolean(config.backlinks)}
-                    className="h-4 w-4 accent-[hsl(var(--primary))]"
-                  />
-                  {fl.backlinks}
-                </label>
               </>
             ) : null}
             {provider === "ahrefs" || provider === "openpagerank" ? (

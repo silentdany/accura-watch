@@ -41,7 +41,7 @@ export type QueryOpportunity = {
   expectedCtr: number;
   /** Extra clicks per 28 days if CTR matched the typical CTR at this position. */
   missedClicks: number;
-  /** DataForSEO keyword metrics, when collected. */
+  /** Keyword metrics, when they were collected. */
   volume: number | null;
   difficulty: number | null;
   intent: string | null;
@@ -51,7 +51,7 @@ export type CompetitorRow = {
   domain: string;
   sharedKeywords: number;
   keywords: number;
-  /** DataForSEO's traffic estimate. */
+  /** Estimated organic traffic. */
   etv: number;
   /** Estimate corrected by this site's real-vs-estimated ratio. */
   calibratedTraffic: number | null;
@@ -83,13 +83,13 @@ export type SiteInsights = {
   /** Sentry error events per 1,000 visitors. */
   errorsPer1k: Ratio | null;
   /**
-   * Real Search Console clicks ÷ DataForSEO's traffic estimate, median over past months.
+   * Real Search Console clicks ÷ the traffic estimate, median over past months.
    * Used to calibrate competitor traffic estimates.
    */
   calibration: { ratio: number; months: number; estimated: number; real: number } | null;
   /** Impressions ÷ monthly search volume over the top queries (28 days, volume scaled to 28 days). */
   shareOfVoice: { value: number; queries: number } | null;
-  /** Search clicks by DataForSEO search intent (top queries). */
+  /** Search clicks by search intent (top queries). */
   intentMix: { intent: string; clicks: number; share: number }[];
   /** Referring domains gained / lost over the last 28 days. */
   links28d: { gained: number; lost: number } | null;
@@ -433,7 +433,7 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
   const monthlyKeywords = seoSeries("monthly_keywords");
   const organicKeywords = monthlyKeywords.length >= 2 ? monthlyKeywords : seoSeries("organic_keywords");
 
-  // Calibration: real clicks ÷ DataForSEO estimate, per fully-covered month, median of the last 12.
+  // Calibration: real clicks ÷ traffic estimate, per fully-covered month, median of the last 12.
   let calibration: SiteInsights["calibration"] = null;
   if (hasGsc) {
     const ratios: { real: number; est: number }[] = [];
@@ -537,7 +537,7 @@ export async function loadSiteInsights(site: Site, range: Range): Promise<SiteIn
     .sort((a, b) => (b.volume ?? b.impressions) - (a.volume ?? a.impressions))
     .slice(0, 6);
 
-  // Share of voice & intent mix (needs DataForSEO keyword metrics)
+  // Share of voice & intent mix (needs stored keyword metrics)
   let shareOfVoice: SiteInsights["shareOfVoice"] = null;
   const withVolume = queries.filter((q) => (kw.get(q.key.toLowerCase())?.volume ?? 0) > 0);
   if (withVolume.length) {

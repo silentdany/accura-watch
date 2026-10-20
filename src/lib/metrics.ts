@@ -2,6 +2,7 @@ import type { HealthCheck, Insight, Site, SyncState } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { addDays, utcDay, ymd, type Range } from "@/lib/dates";
 import { pctChange } from "@/lib/format";
+import { RETIRED_SOURCES } from "@/lib/collect/collectors";
 import { DAILY_REFERRER_PREFIX } from "@/lib/collect/store";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -58,11 +59,16 @@ export type SeoSummary = {
   organicKeywords: number | null;
   organicKeywordsPrev: number | null;
   organicEtv: number | null;
+  organicEtvPrev: number | null;
   organicTop10: number | null;
   opr: number | null;
   ahrefsDr: number | null;
   ahrefsDrPrev: number | null;
   collectedAt: string | null;
+  /** Carried forward over the selected range: a day with no measurement keeps the previous value. */
+  keywordsSeries: Series;
+  referringSeries: Series;
+  etvSeries: Series;
 };
 
 export type SyncInfo = { source: string; ok: boolean; error: string | null; lastRunAt: string; lastSuccessAt: string | null };
@@ -146,6 +152,15 @@ export type Overview = {
     eventsPrev: number;
     clicksSeries: Series;
     visitorsSeries: Series;
+    keywords: number | null;
+    keywordsPrev: number | null;
+    referringDomains: number | null;
+    referringDomainsPrev: number | null;
+    estimated: number | null;
+    estimatedPrev: number | null;
+    keywordsSeries: Series;
+    referringSeries: Series;
+    etvSeries: Series;
   };
   sites: SiteRow[];
   alerts: Alert[];
@@ -189,6 +204,56 @@ function weightedPosition(
     }
   }
   return w > 0 ? s / w : null;
+}
+
+function mergedMetric(
+  get: (siteId: string, source: string, key: string) => Map<string, number> | null,
+  siteId: string,
+  keys: string[],
+): Map<string, number> | null {
+  const out = new Map<string, number>();
+  for (const key of keys) {
+    const m = get(siteId, "seo", key);
+    if (!m) continue;
+    for (const [d, v] of m) if (!out.has(d)) out.set(d, v);
+  }
+  return out.size ? out : null;
+}
+
+/** Last known value repeated until the next measurement. Days before the first point are NaN. */
+function carryForward(m: Map<string, number> | null, dates: string[]): number[] {
+  if (!m || !m.size) return dates.map(() => NaN);
+  const sorted = [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  let idx = 0;
+  let last = NaN;
+  return dates.map((d) => {
+    while (idx < sorted.length && sorted[idx][0] <= d) {
+      last = sorted[idx][1];
+      idx += 1;
+    }
+    return last;
+  });
+}
+
+const RETIRED = new Set<string>(RETIRED_SOURCES);
+
+/** Hide retired DataForSEO collectors, and drop DataForSEO text from a remaining error. */
+export function presentSync(rows: SyncInfo[]): SyncInfo[] {
+  return rows.flatMap((s) => {
+    if (RETIRED.has(s.source)) return [];
+    if (!s.error || !/dataforseo/i.test(s.error)) return [s];
+    const parts = s.error
+      .split(/\s*·\s*/)
+      .map((p) => p.trim())
+      .filter((p) => p && !/dataforseo/i.test(p));
+    if (!parts.length) return [{ ...s, ok: true, error: null }];
+    return [{ ...s, error: parts.join(" · ") }];
+  });
+}
+
+function withoutDataForSeo(detail: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!detail || !Array.isArray(detail.errors)) return detail;
+  return { ...detail, errors: detail.errors.filter((e) => typeof e !== "string" || !/dataforseo/i.test(e)) };
 }
 
 function latestTwo(m: Map<string, number> | null): [number | null, number | null] {
@@ -307,11 +372,15 @@ function buildRows({ sites, range, metrics, insights, checks, states }: BuildInp
         organicKeywords: kw,
         organicKeywordsPrev: kwPrev,
         organicEtv: latestTwo(get(site.id, "seo", "organic_etv"))[0],
+        organicEtvPrev: latestTwo(get(site.id, "seo", "organic_etv"))[1],
         organicTop10: latestTwo(get(site.id, "seo", "organic_top10"))[0],
         opr: latestTwo(get(site.id, "seo", "opr"))[0],
         ahrefsDr: latestTwo(get(site.id, "seo", "ahrefs_dr"))[0],
         ahrefsDrPrev: latestTwo(get(site.id, "seo", "ahrefs_dr"))[1],
         collectedAt: seoSummary.collectedAt ?? null,
+        keywordsSeries: { dates: recentDays, values: carryForward(mergedMetric(get, site.id, ["organic_keywords", "monthly_keywords"]), recentDays) },
+        referringSeries: { dates: recentDays, values: carryForward(get(site.id, "seo", "referring_domains"), recentDays) },
+        etvSeries: { dates: recentDays, values: carryForward(mergedMetric(get, site.id, ["organic_etv", "monthly_etv"]), recentDays) },
       };
     }
 
@@ -343,9 +412,11 @@ function buildRows({ sites, range, metrics, insights, checks, states }: BuildInp
       posthog,
       sentry,
       seo,
-      sync: states
-        .filter((s) => s.siteId === site.id)
-        .map((s) => ({ source: s.source, ok: s.ok, error: s.error, lastRunAt: s.lastRunAt.toISOString(), lastSuccessAt: s.lastSuccessAt?.toISOString() ?? null })),
+      sync: presentSync(
+        states
+          .filter((s) => s.siteId === site.id)
+          .map((s) => ({ source: s.source, ok: s.ok, error: s.error, lastRunAt: s.lastRunAt.toISOString(), lastSuccessAt: s.lastSuccessAt?.toISOString() ?? null })),
+      ),
     };
   });
 }
@@ -429,6 +500,53 @@ async function loadData(sites: Site[], range: Range) {
   return { metrics: [...metrics, ...seoMetrics], insights, checks, states };
 }
 
+function sumNullable(rows: SiteRow[], pick: (s: SeoSummary) => number | null): number | null {
+  let sum = 0;
+  let any = false;
+  for (const r of rows) {
+    if (!r.seo) continue;
+    const v = pick(r.seo);
+    if (v != null && Number.isFinite(v)) {
+      sum += v;
+      any = true;
+    }
+  }
+  return any ? sum : null;
+}
+
+function sumCarried(rows: SiteRow[], key: "keywordsSeries" | "referringSeries" | "etvSeries", dates: string[]): Series {
+  return {
+    dates,
+    values: dates.map((_, i) => {
+      let sum = 0;
+      let any = false;
+      for (const r of rows) {
+        const v = r.seo?.[key].values[i];
+        if (v != null && Number.isFinite(v)) {
+          sum += v;
+          any = true;
+        }
+      }
+      return any ? sum : NaN;
+    }),
+  };
+}
+
+function seoTotals(rows: SiteRow[], range: Range) {
+  const dates = dayList(utcDay(), range);
+  return {
+    keywords: sumNullable(rows, (s) => s.organicKeywords),
+    keywordsPrev: sumNullable(rows, (s) => s.organicKeywordsPrev),
+    referringDomains: sumNullable(rows, (s) => s.referringDomains),
+    referringDomainsPrev: sumNullable(rows, (s) => s.referringDomainsPrev),
+    estimated: sumNullable(rows, (s) => s.organicEtv),
+    estimatedPrev: sumNullable(rows, (s) => s.organicEtvPrev),
+    keywordsSeries: sumCarried(rows, "keywordsSeries", dates),
+    referringSeries: sumCarried(rows, "referringSeries", dates),
+    etvSeries: sumCarried(rows, "etvSeries", dates),
+  };
+}
+
 function sumSeries(list: (Series | undefined)[], dates: string[]): Series {
   const values = dates.map(() => 0);
   for (const s of list) {
@@ -497,6 +615,7 @@ export async function loadOverview(range: Range, opts: { includeInactive?: boole
       eventsPrev: sum((r) => r.sentry?.eventsPrev),
       clicksSeries: sumSeries(gscRows.map((r) => r.gsc?.clicksSeries), gscDates),
       visitorsSeries: sumSeries(rows.map((r) => r.posthog?.visitorsSeries), dayList(utcDay(), range)),
+      ...seoTotals(rows, range),
     },
     sites: rows,
     alerts: computeAlerts(rows),
@@ -582,7 +701,7 @@ export async function loadSiteReport(site: Site, range: Range): Promise<SiteRepo
     posthogReferrers: ins<{ rows: { key: string; visitors: number }[] }>("posthog", "top_referrers")?.rows ?? null,
     posthogReferrersByDay: row.posthog ? referrersAligned(referrerMetrics, site.id, row.posthog.visitorsSeries.dates) : null,
     sentryIssues: ins<{ issues: SentryIssueRow[] }>("sentry", "issues")?.issues ?? null,
-    seoDetail: ins("seo", "summary"),
+    seoDetail: withoutDataForSeo(ins<Record<string, unknown>>("seo", "summary")),
     latency,
     alerts: computeAlerts([row]),
   };

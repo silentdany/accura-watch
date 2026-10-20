@@ -168,18 +168,6 @@ export async function saveIntegrationAction(_: ActionState, fd: FormData): Promi
           return { ok: true, message: t.actions.openseoSavedNoBalance(msg) };
         }
       }
-      case "dataforseo":
-        await saveIntegration(
-          "dataforseo",
-          {
-            locationCode: Number(field(fd, "locationCode")) || 2840,
-            languageCode: field(fd, "languageCode") || "en",
-            backlinks: fd.get("backlinks") === "on",
-            cadenceDays: Math.max(1, Number(field(fd, "cadenceDays")) || 7),
-          },
-          { login: field(fd, "login"), password: field(fd, "password") },
-        );
-        return t.actions.providerSaved("DataForSEO");
       case "ahrefs":
         await saveIntegration("ahrefs", {}, { apiKey: field(fd, "apiKey") });
         return t.actions.providerSaved("Ahrefs");

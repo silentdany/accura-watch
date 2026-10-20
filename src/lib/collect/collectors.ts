@@ -4,20 +4,21 @@ import { addDays, parseYmd, utcDay, ymd, DAY_MS } from "@/lib/dates";
 import { querySearchAnalytics, type GscRow } from "@/lib/providers/google";
 import { hostClause, runHogql } from "@/lib/providers/posthog";
 import { listSentryIssues, sentryDailyEvents } from "@/lib/providers/sentry";
-import { backlinksNewLost, competitorsAndGaps, fetchDomainSeo, keywordOverview, RANK_HISTORY_START, rankHistory } from "@/lib/providers/seo";
+import { fetchDomainSeo } from "@/lib/providers/seo";
 import { checkHealth } from "@/lib/providers/health";
 import { DAILY_REFERRER_PREFIX, replacePrefixedDaily, writeDaily, writeInsight, type Point } from "./store";
 import { errorMessage } from "@/lib/http";
 
-export type Source = "health" | "gsc" | "posthog" | "sentry" | "seo" | "backlinks" | "rank_history" | "competitors" | "keywords";
-export const SOURCES: Source[] = ["health", "gsc", "posthog", "sentry", "seo", "backlinks", "rank_history", "competitors", "keywords"];
+export type Source = "health" | "gsc" | "posthog" | "sentry" | "seo";
+export const SOURCES: Source[] = ["health", "gsc", "posthog", "sentry", "seo"];
+/** Collectors that only existed to call DataForSEO. Their SyncState rows are dropped. */
+export const RETIRED_SOURCES = ["backlinks", "rank_history", "competitors", "keywords"] as const;
 
 export type Connected = {
   google: boolean;
   posthog: boolean;
   sentry: boolean;
   openseo: boolean;
-  dataforseo: boolean;
   openpagerank: boolean;
   ahrefs: boolean;
   seoCadenceDays: number;
@@ -321,8 +322,8 @@ const sentry: Collector = {
 const seo: Collector = {
   source: "seo",
   label: "Domain SEO",
-  cadenceMinutes: (c) => (c.openseo || c.dataforseo ? c.seoCadenceDays * 1440 - 60 : 1440 - 60),
-  skipReason: (_site, c) => (!c.openseo && !c.dataforseo && !c.openpagerank && !c.ahrefs ? "No SEO provider connected" : null),
+  cadenceMinutes: (c) => (c.openseo ? c.seoCadenceDays * 1440 - 60 : 1440 - 60),
+  skipReason: (_site, c) => (!c.openseo && !c.openpagerank && !c.ahrefs ? "No SEO provider connected" : null),
   async run(site) {
     const data = await fetchDomainSeo(site.domain);
     if (!data.organic && !data.backlinks && !data.backlinkDays.length && !data.openPageRank && !data.ahrefs) {
@@ -353,83 +354,6 @@ const seo: Collector = {
     const cost = data.cost ? `cost $${data.cost.toFixed(4)}` : "";
     if (data.errors.length) return `partial: ${data.errors.join(" · ")}${cost ? ` · ${cost}` : ""}`;
     return cost || undefined;
-  },
-};
-
-// ─── DataForSEO extras (history, competitors, keyword metrics) ───────────────
-
-const WEEK = 7 * 1440 - 60;
-const MONTH = 30 * 1440 - 60;
-/** Extra paid calls stay off while OpenSEO is the SEO source, so the $10 credit pool is not spent on history, competitors or keyword volumes. */
-const needsExtraSeo = (_site: Site, c: Connected) =>
-  c.openseo ? "OpenSEO mode: this extra call stays off" : !c.dataforseo ? "DataForSEO not connected" : null;
-const usd = (cost: number) => (cost ? ` · cost $${cost.toFixed(4)}` : "");
-
-const backlinks: Collector = {
-  source: "backlinks",
-  label: "Backlink history",
-  cadenceMinutes: () => WEEK,
-  skipReason: needsExtraSeo,
-  async run(site, { firstRun }) {
-    // First run backfills 16 months (to line up with Search Console history); then a 2-week overlap.
-    const { days, cost, daysBack } = await backlinksNewLost(site.domain, firstRun ? 490 : 14);
-    const pts = (f: (d: (typeof days)[number]) => number) => days.map((d) => ({ date: d.date, value: f(d) }));
-    await writeDaily(site.id, "seo", {
-      new_backlinks: pts((d) => d.newBacklinks),
-      lost_backlinks: pts((d) => d.lostBacklinks),
-      new_referring_domains: pts((d) => d.newReferringDomains),
-      lost_referring_domains: pts((d) => d.lostReferringDomains),
-    });
-    return `${days.length} days (window ${daysBack} d)${usd(cost)}`;
-  },
-};
-
-const rankHist: Collector = {
-  source: "rank_history",
-  label: "Ranking history",
-  cadenceMinutes: () => MONTH,
-  skipReason: needsExtraSeo,
-  async run(site, { firstRun }) {
-    const { months, cost } = await rankHistory(site.domain, firstRun ? RANK_HISTORY_START : ymd(addDays(utcDay(), -95)));
-    const pts = (f: (m: (typeof months)[number]) => number) => months.map((m) => ({ date: m.month, value: f(m) }));
-    await writeDaily(site.id, "seo", {
-      monthly_keywords: pts((m) => m.keywords),
-      monthly_etv: pts((m) => m.etv),
-      monthly_top10: pts((m) => m.top10),
-    });
-    return `${months.length} months${usd(cost)}`;
-  },
-};
-
-const competitors: Collector = {
-  source: "competitors",
-  label: "Competitors",
-  cadenceMinutes: () => MONTH,
-  skipReason: needsExtraSeo,
-  async run(site) {
-    const r = await competitorsAndGaps(site.domain);
-    await writeInsight(site.id, "seo", "competitors", {
-      competitors: r.competitors,
-      gaps: r.gaps.slice(0, 60),
-      collectedAt: new Date().toISOString(),
-    });
-    return `${r.competitors.length} competitors, ${r.gaps.length} gaps${usd(r.cost)}`;
-  },
-};
-
-const keywords: Collector = {
-  source: "keywords",
-  label: "Keyword metrics",
-  cadenceMinutes: () => WEEK,
-  skipReason: (site, c) =>
-    c.openseo ? "OpenSEO mode: keyword volumes stay off" : !c.dataforseo ? "DataForSEO not connected" : !site.gscProperty ? "No Search Console property" : null,
-  async run(site) {
-    const top = await prisma.insight.findUnique({ where: { siteId_source_kind: { siteId: site.id, source: "gsc", kind: "top_queries" } } });
-    const queries = ((top?.data as { rows?: { key: string }[] } | null)?.rows ?? []).map((r) => r.key);
-    if (!queries.length) throw new Error("No Search Console queries yet — waiting for the first GSC sync");
-    const { rows, cost } = await keywordOverview(queries);
-    await writeInsight(site.id, "seo", "keywords", { rows, collectedAt: new Date().toISOString() });
-    return `${rows.length} keywords${usd(cost)}`;
   },
 };
 
@@ -465,8 +389,4 @@ export const COLLECTORS: Record<Source, Collector> = {
   posthog,
   sentry,
   seo,
-  backlinks,
-  rank_history: rankHist,
-  competitors,
-  keywords,
 };

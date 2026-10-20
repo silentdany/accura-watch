@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import type { Locale } from "@/i18n";
 
-type Provider = "google" | "posthog" | "sentry" | "openseo" | "dataforseo" | "openpagerank" | "ahrefs";
+type Provider = "google" | "posthog" | "sentry" | "openseo" | "openpagerank" | "ahrefs";
 type Guide = { title: string; steps: React.ReactNode[] };
 
 function A({ href, children }: { href: string; children: React.ReactNode }) {
@@ -119,19 +119,6 @@ function guidesFr(redirectUri: string): Record<Provider, Guide[]> {
           </>,
           <>
             Chaque site ne déclenche qu&rsquo;un aperçu (trafic, mots-clés) et, si le plafond le permet, un résumé des liens. Le rythme par défaut est 30 jours.
-          </>,
-        ],
-      },
-    ],
-    dataforseo: [
-      {
-        title: "Identifiants API",
-        steps: [
-          <>
-            Crée un compte sur <A href="https://app.dataforseo.com/register">dataforseo.com</A> et ajoute un peu de crédit (paiement à l&rsquo;usage, dépôt minimum 50 $).
-          </>,
-          <>
-            Ouvre <A href="https://app.dataforseo.com/api-access">API Access</A> : le <b>mot de passe API</b> y est généré, il est différent de celui de ton compte.
           </>,
         ],
       },
@@ -262,19 +249,6 @@ function guidesEn(redirectUri: string): Record<Provider, Guide[]> {
           </>,
           <>
             Each site triggers one overview (traffic, keywords) and, when the cap allows, one link summary. The default pace is 30 days.
-          </>,
-        ],
-      },
-    ],
-    dataforseo: [
-      {
-        title: "API credentials",
-        steps: [
-          <>
-            Sign up at <A href="https://app.dataforseo.com/register">dataforseo.com</A> and add a little credit (pay as you go, $50 minimum deposit).
-          </>,
-          <>
-            Open <A href="https://app.dataforseo.com/api-access">API Access</A>: the <b>API password</b> is generated there and differs from your account password.
           </>,
         ],
       },

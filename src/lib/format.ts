@@ -33,7 +33,7 @@ export function pctChange(cur: number, prev: number): number | null {
   return (cur - prev) / prev;
 }
 
-/** Best available authority score: Ahrefs DR > DataForSEO rank (both /100) > Open PageRank (/10). */
+/** Best available authority score: Ahrefs DR, then a stored 0–100 rank, then Open PageRank (/10). */
 export function authority(
   seo: { ahrefsDr: number | null; rank: number | null; opr: number | null } | null | undefined,
 ): { value: number; label: "DR" | "Rank" | "OPR"; text: string } | null {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { presentSync } from "@/lib/metrics";
 import { gscImportCandidates, loadCatalogs } from "@/lib/sites";
 import { getGoogleCreds } from "@/lib/integrations";
 import { errorMessage } from "@/lib/http";
@@ -92,7 +93,15 @@ export default async function SitesPage() {
                 sentryProject: x.sentryProject,
                 active: x.active,
                 pinned: x.pinned,
-                sync: x.syncStates.map((st) => ({ source: st.source, ok: st.ok, error: st.error, lastRunAt: st.lastRunAt.toISOString(), lastSuccessAt: st.lastSuccessAt?.toISOString() ?? null })),
+                sync: presentSync(
+                  x.syncStates.map((st) => ({
+                    source: st.source,
+                    ok: st.ok,
+                    error: st.error,
+                    lastRunAt: st.lastRunAt.toISOString(),
+                    lastSuccessAt: st.lastSuccessAt?.toISOString() ?? null,
+                  })),
+                ),
               }}
             />
           ))}

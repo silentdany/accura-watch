@@ -8,13 +8,28 @@ import { getI18n } from "@/i18n/server";
 import { Card, CardHeader, Delta, PageHeader, Section, Stat } from "@/components/ui";
 import { RangeTabs } from "@/components/range-tabs";
 import { SyncButton } from "@/components/forms";
-import { TimeSeriesChart } from "@/components/chart";
+import { Legend, TimeSeriesChart } from "@/components/chart";
+import { Sparkline } from "@/components/sparkline";
+import type { Series } from "@/lib/metrics";
 import { AlertList } from "@/components/alerts";
 import { SiteCard } from "@/components/site-card";
 import { FreshnessLine } from "@/components/site/common";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+function onDates(series: Series | undefined, dates: string[]): (number | null)[] {
+  const map = new Map(series?.dates.map((d, i) => [d, series.values[i]]) ?? []);
+  return dates.map((d) => (map.has(d) && Number.isFinite(map.get(d)!) ? map.get(d)! : null));
+}
+
+function asPoints(values: number[]): (number | null)[] {
+  return values.map((v) => (Number.isFinite(v) ? v : null));
+}
+
+function varies(values: (number | null)[]): boolean {
+  return new Set(values.filter((v): v is number => v != null)).size >= 2;
+}
 
 async function Onboarding() {
   const { t } = await getI18n();
@@ -92,6 +107,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const sites = [...o.sites].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.gsc?.clicks ?? -1) - (a.gsc?.clicks ?? -1));
   const vs = t.period.vsPrevious(range);
+  const bothTrends = gscSites.length > 0 && phSites.length > 0;
+  const chartDates = phSites.length ? tot.visitorsSeries.dates : tot.clicksSeries.dates;
+  const keywords = asPoints(tot.keywordsSeries.values);
+  const referring = asPoints(tot.referringSeries.values);
+  const hasSeo = tot.keywords != null || tot.referringDomains != null || tot.estimated != null;
+  const seoBoth = keywords.some((v) => v != null) && referring.some((v) => v != null);
 
   return (
     <div className="flex flex-col gap-8">
@@ -178,11 +199,116 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </div>
       </Section>
 
-      {gscSites.length ? (
+      {gscSites.length || phSites.length ? (
         <Card>
-          <CardHeader title={t.home.chartTitle} hint={t.home.chartHint} dot="var(--c-gsc)" />
+          <CardHeader
+            title={bothTrends ? t.home.chartTitle : gscSites.length ? t.home.chartClicksTitle : t.home.chartVisitorsTitle}
+            hint={bothTrends ? t.home.chartHint : t.home.chartHintSingle}
+            dot={gscSites.length ? "var(--c-gsc)" : "var(--c-posthog)"}
+            right={
+              bothTrends ? (
+                <Legend
+                  items={[
+                    { name: t.metrics.clicks.label, color: "var(--c-gsc)" },
+                    { name: t.metrics.visitors.label, color: "var(--c-companion)", dashed: true },
+                  ]}
+                />
+              ) : null
+            }
+          />
           <div className="px-3 pb-3">
-            <TimeSeriesChart dates={tot.clicksSeries.dates} series={[{ name: t.metrics.clicks.label, color: "var(--c-gsc)", values: tot.clicksSeries.values }]} height={240} />
+            <TimeSeriesChart
+              dates={bothTrends || !gscSites.length ? chartDates : tot.clicksSeries.dates}
+              indexed={bothTrends}
+              height={240}
+              series={
+                bothTrends
+                  ? [
+                      { name: t.metrics.clicks.label, color: "var(--c-gsc)", values: onDates(tot.clicksSeries, chartDates) },
+                      { name: t.metrics.visitors.label, color: "var(--c-companion)", values: onDates(tot.visitorsSeries, chartDates), dashed: true },
+                    ]
+                  : gscSites.length
+                    ? [{ name: t.metrics.clicks.label, color: "var(--c-gsc)", values: tot.clicksSeries.values }]
+                    : [{ name: t.metrics.visitors.label, color: "var(--c-posthog)", values: tot.visitorsSeries.values }]
+              }
+            />
+          </div>
+        </Card>
+      ) : null}
+
+      {hasSeo ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {tot.keywords != null ? (
+            <Stat
+              label={t.metrics.keywords.label}
+              help={t.metrics.keywords.help}
+              color="var(--c-seo)"
+              value={f.num(tot.keywords)}
+              delta={<Delta cur={tot.keywords} prev={tot.keywordsPrev} />}
+              chart={<Sparkline values={tot.keywordsSeries.values} color="var(--c-seo)" width={96} height={36} />}
+            />
+          ) : null}
+          {tot.referringDomains != null ? (
+            <Stat
+              label={t.metrics.referringDomains.label}
+              help={t.metrics.referringDomains.help}
+              color="var(--c-seo)"
+              value={f.num(tot.referringDomains)}
+              delta={<Delta cur={tot.referringDomains} prev={tot.referringDomainsPrev} />}
+              chart={<Sparkline values={tot.referringSeries.values} color="var(--c-seo)" width={96} height={36} />}
+            />
+          ) : null}
+          {tot.estimated != null ? (
+            <Stat
+              label={t.metrics.estimated.label}
+              help={t.metrics.estimated.help}
+              color="var(--c-seo)"
+              value={
+                <>
+                  {f.num(tot.estimated)}
+                  <span className="text-lg font-medium text-subtle">{t.common.perMonth}</span>
+                </>
+              }
+              delta={<Delta cur={tot.estimated} prev={tot.estimatedPrev} />}
+              chart={<Sparkline values={tot.etvSeries.values} color="var(--c-seo)" width={96} height={36} />}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      {varies(keywords) || varies(referring) ? (
+        <Card>
+          <CardHeader
+            title={t.home.seoTitle}
+            hint={seoBoth ? t.home.seoHint : t.home.seoHintSingle}
+            dot="var(--c-seo)"
+            right={
+              seoBoth ? (
+                <Legend
+                  items={[
+                    { name: t.metrics.keywords.label, color: "var(--c-seo)" },
+                    { name: t.metrics.referringDomains.label, color: "var(--c-companion)", dashed: true },
+                  ]}
+                />
+              ) : null
+            }
+          />
+          <div className="px-3 pb-3">
+            <TimeSeriesChart
+              dates={tot.keywordsSeries.dates}
+              indexed={seoBoth}
+              height={220}
+              series={
+                seoBoth
+                  ? [
+                      { name: t.metrics.keywords.label, color: "var(--c-seo)", values: keywords },
+                      { name: t.metrics.referringDomains.label, color: "var(--c-companion)", values: referring, dashed: true },
+                    ]
+                  : keywords.some((v) => v != null)
+                    ? [{ name: t.metrics.keywords.label, color: "var(--c-seo)", values: keywords }]
+                    : [{ name: t.metrics.referringDomains.label, color: "var(--c-seo)", values: referring }]
+              }
+            />
           </div>
         </Card>
       ) : null}

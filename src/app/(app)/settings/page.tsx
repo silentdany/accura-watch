@@ -24,7 +24,6 @@ const DOT: Record<string, string> = {
   posthog: "var(--c-posthog)",
   sentry: "var(--c-sentry)",
   openseo: "var(--c-seo)",
-  dataforseo: "var(--c-seo)",
   openpagerank: "var(--c-seo)",
   ahrefs: "var(--c-seo)",
 };
