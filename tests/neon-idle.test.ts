@@ -39,7 +39,7 @@ const { POST: mcpRoute } = await import("@/app/api/mcp/route");
 const { GET: cronRoute } = await import("@/app/api/cron/collect/route");
 const { POST: revokeRoute } = await import("@/app/oauth/revoke/route");
 const { revokeApiToken } = await import("@/lib/api-tokens");
-const { revokeOauthGrant, mcpResource } = await import("@/lib/oauth/server");
+const { revokeOauthGrant, mcpResource, exchangeToken, verifyOauthAccess } = await import("@/lib/oauth/server");
 const { ownerExists } = await import("@/lib/auth");
 const { loadOverview } = await import("@/lib/metrics");
 const { CACHE_TAGS } = await import("@/lib/cache");
@@ -48,6 +48,7 @@ const BASE = "http://localhost:3000";
 const TOKEN_A = "aw_test_token_a_000000000000000000";
 const TOKEN_B = "aw_test_token_b_000000000000000000";
 const ACCESS = "awoa_test_access_00000000000000000";
+const USED_REFRESH = "awor_test_refresh_used_000000000000";
 
 let apiTokens: Map<string, { id: string; lastUsedAt: Date | null }>;
 type Grant = { id: string; familyId: string; resource: string; scope: string; accessExpiresAt: Date; revokedAt: Date | null; lastUsedAt: Date | null };
@@ -102,9 +103,18 @@ beforeEach(() => {
     for (const [h, r] of apiTokens) if (r.id === id) apiTokens.delete(h);
     return { count: 1 };
   });
+  db.on("oauthClient.findUnique", (a) => {
+    const id = (a as { where: { id: string } }).where.id;
+    return id === "client-1" ? { id, name: "Test client", redirectUris: [], clientUri: null } : null;
+  });
   db.on("oauthGrant.findUnique", (a) => {
-    const w = (a as { where: { accessHash?: string; id?: string } }).where;
+    const w = (a as { where: { accessHash?: string; refreshHash?: string; id?: string } }).where;
     if (w.accessHash) return grants.get(w.accessHash) ?? null;
+    if (w.refreshHash === sha256(USED_REFRESH)) {
+      // Older refresh token of the same family, already rotated: presenting it again is a replay.
+      return { id: "g0", familyId: "f1", clientId: "client-1", revokedAt: null, rotatedAt: new Date("2026-11-22T09:40:00Z") };
+    }
+    if (w.refreshHash) return null;
     return [...grants.values()].find((g) => g.id === w.id) ?? null;
   });
   db.on("oauthGrant.updateMany", (a) => {
@@ -256,6 +266,28 @@ describe("MCP endpoint", () => {
     expect((await mcpRoute(mcpRequest(ACCESS, toolsList))).status).toBe(200);
     await revokeOauthGrant("g1");
     expect((await mcpRoute(mcpRequest(ACCESS, toolsList))).status).toBe(401);
+  });
+
+  it("refuses a cached access token once a replayed refresh token revokes its family", async () => {
+    expect((await mcpRoute(mcpRequest(ACCESS, toolsList))).status).toBe(200);
+    db.calls = [];
+    expect((await mcpRoute(mcpRequest(ACCESS, toolsList))).status).toBe(200);
+    expect(db.calls).toEqual([]); // served from the cache
+
+    const replay = await exchangeToken(
+      new URLSearchParams({ grant_type: "refresh_token", client_id: "client-1", refresh_token: USED_REFRESH }),
+    );
+    expect(replay).toMatchObject({ error: "invalid_grant" });
+    expect(grants.get(sha256(ACCESS))!.revokedAt).not.toBeNull();
+    expect((await mcpRoute(mcpRequest(ACCESS, toolsList))).status).toBe(401);
+  });
+
+  it("refuses a cached access token presented for another resource", async () => {
+    expect(await verifyOauthAccess(ACCESS, mcpResource())).toBe(true);
+    db.calls = [];
+    expect(await verifyOauthAccess(ACCESS, "https://other.example/api/mcp")).toBe(false);
+    expect(db.calls).toEqual([]); // the refusal comes from the cached grant, not a fresh lookup
+    expect(await verifyOauthAccess(ACCESS, mcpResource())).toBe(true);
   });
 
   it("does not accept an OAuth token for another resource, even when cached", async () => {
