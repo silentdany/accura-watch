@@ -44,7 +44,7 @@ On Vercel, nothing to do: the build runs `scripts/db-sync.mjs`, which detects th
 ### Deploy on Vercel
 
 1. Import the repo and set the env vars from `.env.example`.
-2. Deploy. The `vercel-build` script syncs the database schema (`scripts/db-sync.mjs`) before building. Additive changes apply automatically; a destructive change fails the build instead of dropping data. Preview deployments that share the production database sync it too.
+2. Deploy. The `vercel-build` script syncs the database schema (`scripts/db-sync.mjs`) before building. Additive changes apply automatically; a destructive change fails the build instead of dropping data. Only production builds (`VERCEL_ENV=production`) sync it; preview and development builds skip without connecting, so a preview never changes the production schema. Run by hand outside Vercel, `npm run db:sync` syncs as before.
 3. `vercel.json` schedules `/api/cron/collect` hourly. The **Vercel Hobby** plan only allows daily crons, so either upgrade or enable `.github/workflows/collect.yml` (set the `WATCH_URL` and `CRON_SECRET` secrets and the `ENABLE_COLLECT_WORKFLOW=true` variable). Any external cron hitting the endpoint with `Authorization: Bearer $CRON_SECRET` also works.
 
 ## Data collection
@@ -70,9 +70,9 @@ On Neon (or any Postgres that suspends when idle), every query wakes the compute
 | API token and OAuth access-token checks | the current UTC hour (an access token still stops at its expiry) | revoking the token or grant |
 | `get_overview` (REST and MCP), per range | the current UTC hour | every collection run, any tool or Settings action that writes |
 | "an owner account exists" on the login page | the current UTC day ("no owner yet" is never cached) | creating the account |
-| browser session | 5 minutes, in a signed cookie | signing out |
+| browser session | 5 minutes, in a signed cookie | signing out (in that browser only) |
 
-What it changes: `lastUsedAt` on tokens is accurate to the hour, `generatedAt` in `get_overview` tells when the numbers were computed, and a session deleted directly in the database stays usable for up to 5 minutes. Run a single scheduler: the Vercel cron **or** the GitHub workflow, not both.
+What it changes: `lastUsedAt` on tokens is accurate to the hour, `generatedAt` in `get_overview` tells when the numbers were computed, and a session deleted directly in the database, or a copy of the session cookies taken before sign-out, stays usable for up to 5 minutes. Run a single scheduler: the Vercel cron **or** the GitHub workflow, not both.
 
 ### Integrations
 

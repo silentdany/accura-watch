@@ -60,8 +60,9 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   emailAndPassword: { enabled: true },
   // Signed session data in a cookie for 5 minutes: page views and API calls with a
-  // browser session skip the session table in between. Signing out clears it at
-  // once; a session deleted in the database stays usable for at most 5 minutes.
+  // browser session skip the session table in between. Signing out clears the
+  // cookies in that browser only: a copy taken earlier, or a session deleted in
+  // the database, stays usable for at most 5 minutes.
   session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
   databaseHooks: {
     user: {
