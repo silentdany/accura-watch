@@ -1,5 +1,7 @@
 # Optional: hourly collection for hosts without cron (e.g. Vercel Hobby only allows daily crons).
 # Set repository secrets WATCH_URL (https://your-instance) and CRON_SECRET, then enable this workflow.
+# Do not enable it when the Vercel cron in vercel.json already runs: each extra run wakes the database
+# (a Neon free compute stays up at least 5 minutes per wake-up).
 name: Collect
 on:
   schedule:

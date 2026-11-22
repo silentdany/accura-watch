@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { ownerExists } from "@/lib/auth";
 import { LoginForm } from "@/components/login-form";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,6 @@ function safeAuthorizeNext(raw: string | undefined): string {
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const nextPath = safeAuthorizeNext((await searchParams).next);
-  const signupAllowed = (await prisma.user.count()) === 0;
+  const signupAllowed = !(await ownerExists());
   return <LoginForm signupAllowed={signupAllowed} nextPath={nextPath} />;
 }

@@ -24,6 +24,19 @@ import { checkHealth } from "@/lib/providers/health";
 import { fetchDomainSeo } from "@/lib/providers/seo";
 import { getOpenSeoUsage, refreshOpenSeoBalance } from "@/lib/providers/openseo";
 import { normalizeDomain } from "@/lib/domain";
+import { CACHE_TAGS, HOUR_MS, cachedPerWindow, invalidate } from "@/lib/cache";
+
+/**
+ * The overview only changes when a collection runs or something is edited, and
+ * both drop the `data` tag. Agents that poll it between two collections are
+ * answered from the Data Cache without waking the database. `generatedAt` in the
+ * result tells when it was computed.
+ */
+const cachedOverview = cachedPerWindow(
+  "overview-v1",
+  async (range: number) => JSON.parse(JSON.stringify(await loadOverview(parseRange(range)))) as Awaited<ReturnType<typeof loadOverview>>,
+  { windowMs: HOUR_MS, tags: [CACHE_TAGS.data] },
+);
 
 /**
  * Single tool registry, served both by the MCP server (/api/mcp) and the
@@ -65,7 +78,7 @@ export const TOOLS: ToolDef[] = [
     input: z.object({ range: rangeArg, include_series: z.boolean().optional().describe("Include daily series (bigger output). Default false.") }),
     annotations: { readOnlyHint: true },
     async handler({ range, include_series }) {
-      const o = await loadOverview(parseRange(range));
+      const o = (await cachedOverview(parseRange(range)))!;
       if (include_series) return o;
       const strip = <T extends object>(obj: T | null) =>
         obj ? Object.fromEntries(Object.entries(obj).filter(([k]) => !k.endsWith("Series"))) : null;
@@ -362,5 +375,10 @@ export async function callTool(name: string, rawArgs: unknown): Promise<unknown>
   if (!parsed.success) {
     throw new Error(`Invalid arguments: ${z.prettifyError(parsed.error)}`);
   }
-  return t.handler(parsed.data as Record<string, unknown>);
+  try {
+    return await t.handler(parsed.data as Record<string, unknown>);
+  } finally {
+    // Any tool that may write (sites, sync, integrations) refreshes cached reads.
+    if (!t.annotations?.readOnlyHint) invalidate(CACHE_TAGS.data);
+  }
 }

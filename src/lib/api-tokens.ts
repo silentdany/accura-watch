@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { auth } from "@/lib/auth";
 import { mcpResource, verifyOauthAccess } from "@/lib/oauth/server";
+import { CACHE_TAGS, HOUR_MS, cachedPerWindow, invalidate } from "@/lib/cache";
 
 export async function createApiToken(name: string): Promise<{ id: string; token: string }> {
   const token = randomToken("aw");
@@ -13,16 +14,30 @@ export async function createApiToken(name: string): Promise<{ id: string; token:
 
 export async function revokeApiToken(id: string): Promise<void> {
   await prisma.apiToken.deleteMany({ where: { id } });
+  invalidate(CACHE_TAGS.apiTokens);
 }
+
+/**
+ * Database check for one token hash. Cached for the current UTC hour, so an agent
+ * polling every few minutes does not wake the database; `lastUsedAt` is therefore
+ * accurate to the hour. Revoking a token drops the cache at once.
+ */
+const lookupApiToken = cachedPerWindow(
+  "api-token-v1",
+  async (tokenHash: string): Promise<{ id: string } | null> => {
+    const row = await prisma.apiToken.findUnique({ where: { tokenHash } });
+    if (!row) return null;
+    if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
+      await prisma.apiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
+    }
+    return { id: row.id };
+  },
+  { windowMs: HOUR_MS, tags: [CACHE_TAGS.apiTokens] },
+);
 
 export async function verifyApiToken(token: string): Promise<boolean> {
   if (!token.startsWith("aw_")) return false;
-  const row = await prisma.apiToken.findUnique({ where: { tokenHash: sha256(token) } });
-  if (!row) return false;
-  if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
-    await prisma.apiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
-  }
-  return true;
+  return (await lookupApiToken(sha256(token))) !== null;
 }
 
 export type AuthResult = "ok" | "missing" | "invalid";

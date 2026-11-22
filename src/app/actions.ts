@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { CACHE_TAGS, invalidate } from "@/lib/cache";
 import { getServerSession } from "@/lib/require-session";
 import { runCollection } from "@/lib/collect";
 import { autoMatchSites, createSite, deleteSite, importFromGsc, updateSite } from "@/lib/sites";
@@ -23,7 +24,13 @@ async function guard() {
 async function attempt(fn: () => Promise<string | ActionState>): Promise<ActionState> {
   try {
     await guard();
-    const r = await fn();
+    let r: string | ActionState;
+    try {
+      r = await fn();
+    } finally {
+      // Even a failed action may have written part of its changes.
+      invalidate(CACHE_TAGS.data);
+    }
     revalidatePath("/", "layout");
     return typeof r === "string" ? { ok: true, message: r } : r;
   } catch (err) {
@@ -83,12 +90,14 @@ export async function deleteSiteAction(fd: FormData): Promise<void> {
   await guard();
   await deleteSite(String(fd.get("id")));
   revalidatePath("/", "layout");
+  invalidate(CACHE_TAGS.data);
 }
 
 export async function togglePinAction(fd: FormData): Promise<void> {
   await guard();
   await updateSite(String(fd.get("id")), { pinned: fd.get("pinned") !== "true" });
   revalidatePath("/", "layout");
+  invalidate(CACHE_TAGS.data);
 }
 
 export async function importGscAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -193,6 +202,7 @@ export async function disconnectIntegrationAction(fd: FormData): Promise<void> {
   await guard();
   await deleteIntegration(String(fd.get("provider")) as ProviderId);
   revalidatePath("/", "layout");
+  invalidate(CACHE_TAGS.data);
 }
 
 // ─── API tokens ─────────────────────────────────────────────────────────────

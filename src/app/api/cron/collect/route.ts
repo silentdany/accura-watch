@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runCollection } from "@/lib/collect";
+import { CACHE_TAGS, invalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,13 @@ export async function GET(req: NextRequest) {
   if (req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  const r = await runCollection();
+  let r: Awaited<ReturnType<typeof runCollection>>;
+  try {
+    r = await runCollection();
+  } finally {
+    // New metrics: cached overviews must be recomputed on the next read.
+    invalidate(CACHE_TAGS.data);
+  }
   return NextResponse.json({
     ok: true,
     ...r,
