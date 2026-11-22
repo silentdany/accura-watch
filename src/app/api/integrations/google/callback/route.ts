@@ -4,6 +4,7 @@ import { exchangeGoogleCode } from "@/lib/providers/google";
 import { saveIntegration } from "@/lib/integrations";
 import { appUrl } from "@/lib/env";
 import { errorMessage } from "@/lib/http";
+import { CACHE_TAGS, invalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
   try {
     const { refreshToken, email } = await exchangeGoogleCode(code);
     await saveIntegration("google", { email }, { refreshToken, clientEmail: null, privateKey: null });
+    invalidate(CACHE_TAGS.data);
     return back("connected=google");
   } catch (e) {
     return back(`error=${encodeURIComponent(errorMessage(e))}`);

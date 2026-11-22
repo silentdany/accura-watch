@@ -15,6 +15,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
@@ -39,7 +40,8 @@
     "eslint-config-next": "^15.5.3",
     "prisma": "^6.16.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   },
   "engines": {
     "node": ">=20"

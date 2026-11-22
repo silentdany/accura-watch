@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { prisma } from "@/lib/prisma";
 import { appUrl } from "@/lib/env";
 import { randomToken, sha256 } from "@/lib/crypto";
+import { CACHE_TAGS, HOUR_MS, cachedPerWindow, invalidate } from "@/lib/cache";
 import {
   MCP_SCOPE,
   canonicalResource,
@@ -390,6 +391,7 @@ export async function exchangeToken(params: URLSearchParams): Promise<TokenOk | 
     if (!row || row.clientId !== client.id) return fail("invalid_grant", "Refresh token is invalid.");
     if (row.revokedAt || row.rotatedAt) {
       await prisma.oauthGrant.updateMany({ where: { familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+      invalidate(CACHE_TAGS.oauthGrants);
       return fail("invalid_grant", "Refresh token was already used and the grant was revoked.");
     }
     if (row.refreshExpiresAt.getTime() < Date.now()) return fail("invalid_grant", "Refresh token has expired.");
@@ -419,18 +421,35 @@ export async function revokeOauthToken(token: string): Promise<void> {
       : null;
   if (!row) return;
   await prisma.oauthGrant.updateMany({ where: { familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+  invalidate(CACHE_TAGS.oauthGrants);
 }
+
+type LiveAccess = { resource: string; scope: string; expiresAt: number };
+
+/**
+ * Database check for one access-token hash, cached for the current UTC hour.
+ * Only live, unrevoked grants are cached; expiry is checked again on every call,
+ * and any revocation drops the cache at once.
+ */
+const lookupOauthAccess = cachedPerWindow(
+  "oauth-access-v1",
+  async (accessHash: string): Promise<LiveAccess | null> => {
+    const row = await prisma.oauthGrant.findUnique({ where: { accessHash } });
+    if (!row || row.revokedAt || row.accessExpiresAt.getTime() < Date.now()) return null;
+    if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
+      await prisma.oauthGrant.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
+    }
+    return { resource: row.resource, scope: row.scope, expiresAt: row.accessExpiresAt.getTime() };
+  },
+  { windowMs: HOUR_MS, tags: [CACHE_TAGS.oauthGrants] },
+);
 
 /** True when this access token was issued for `resource` and is still live. */
 export async function verifyOauthAccess(token: string, resource: string): Promise<boolean> {
   if (!token.startsWith(`${ACCESS_PREFIX}_`)) return false;
-  const row = await prisma.oauthGrant.findUnique({ where: { accessHash: sha256(token) } });
-  if (!row || row.revokedAt || row.accessExpiresAt.getTime() < Date.now()) return false;
-  if (row.resource !== resource || !row.scope.split(" ").includes(MCP_SCOPE)) return false;
-  if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
-    await prisma.oauthGrant.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
-  }
-  return true;
+  const grant = await lookupOauthAccess(sha256(token));
+  if (!grant || grant.expiresAt < Date.now()) return false;
+  return grant.resource === resource && grant.scope.split(" ").includes(MCP_SCOPE);
 }
 
 export async function listOauthGrants() {
@@ -445,6 +464,7 @@ export async function revokeOauthGrant(id: string): Promise<void> {
   const row = await prisma.oauthGrant.findUnique({ where: { id } });
   if (!row) return;
   await prisma.oauthGrant.updateMany({ where: { familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+  invalidate(CACHE_TAGS.oauthGrants);
 }
 
 export function oauthJson(result: TokenOk | OauthFailure | { client_id: string; body: Record<string, unknown> }, cors: Record<string, string>): Response {

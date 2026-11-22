@@ -3,6 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { prisma } from "@/lib/prisma";
 import { appUrl } from "@/lib/env";
+import { CACHE_TAGS, DAY_MS, cachedPerWindow, invalidate } from "@/lib/cache";
 
 /**
  * Single-owner instance.
@@ -34,6 +35,18 @@ async function assertSignupOpen(): Promise<void> {
   }
 }
 
+/**
+ * True once the owner account exists, cached for the current UTC day so the
+ * login page does not wake the database. "No owner yet" is never cached, and
+ * creating the account drops the cache. Sign-up itself still counts users in
+ * the database (assertSignupOpen), so this cache never decides who may sign up.
+ */
+export const ownerExists = cachedPerWindow(
+  "owner-exists-v1",
+  async (): Promise<true | null> => ((await prisma.user.count()) > 0 ? true : null),
+  { windowMs: DAY_MS, tags: [CACHE_TAGS.owner] },
+);
+
 const baseURL = appUrl();
 
 export const auth = betterAuth({
@@ -46,6 +59,10 @@ export const auth = betterAuth({
   ],
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   emailAndPassword: { enabled: true },
+  // Signed session data in a cookie for 5 minutes: page views and API calls with a
+  // browser session skip the session table in between. Signing out clears it at
+  // once; a session deleted in the database stays usable for at most 5 minutes.
+  session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
   databaseHooks: {
     user: {
       create: {
@@ -53,6 +70,9 @@ export const auth = betterAuth({
           assertOwnerEmail(user.email);
           await assertSignupOpen();
           return { data: user };
+        },
+        after: async () => {
+          invalidate(CACHE_TAGS.owner);
         },
       },
     },

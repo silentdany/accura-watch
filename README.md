@@ -61,6 +61,19 @@ On Vercel, nothing to do: the build runs `scripts/db-sync.mjs`, which detects th
 
 **Sync now** buttons (global and per site) and the `sync_now` MCP tool bypass the cadence.
 
+### Keeping a scale-to-zero database asleep
+
+On Neon (or any Postgres that suspends when idle), every query wakes the compute for at least 5 minutes, and the free plan allows 100 CU-hours a month. Agents that poll the API would keep it awake all day, so repeated reads are served from the Next.js Data Cache:
+
+| Read | Cached for | Dropped early by |
+|---|---|---|
+| API token and OAuth access-token checks | the current UTC hour (an access token still stops at its expiry) | revoking the token or grant |
+| `get_overview` (REST and MCP), per range | the current UTC hour | every collection run, any tool or Settings action that writes |
+| "an owner account exists" on the login page | the current UTC day ("no owner yet" is never cached) | creating the account |
+| browser session | 5 minutes, in a signed cookie | signing out |
+
+What it changes: `lastUsedAt` on tokens is accurate to the hour, `generatedAt` in `get_overview` tells when the numbers were computed, and a session deleted directly in the database stays usable for up to 5 minutes. Run a single scheduler: the Vercel cron **or** the GitHub workflow, not both.
+
 ### Integrations
 
 | Provider | Credentials | Notes |
