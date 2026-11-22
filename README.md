@@ -91,7 +91,7 @@ claude mcp add --transport http accura-watch https://watch.example.com/api/mcp \
   --header "Authorization: Bearer aw_xxx"
 ```
 
-For those clients, `…/api/mcp?key=aw_xxx` also works. Keep that URL private. OAuth access tokens are not accepted in the query string, and they only authorize `/api/mcp` (not the REST API).
+For clients that cannot send headers, `…/api/mcp?key=aw_xxx` still works but is **deprecated**: the token ends up in URL logs. Responses to it carry a `Deprecation` header, and each use is logged (path and user agent, never the token). Prefer the `Authorization` header. OAuth access tokens are not accepted in the query string, and they only authorize `/api/mcp` (not the REST API).
 
 **Tools**
 

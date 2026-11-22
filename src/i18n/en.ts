@@ -558,7 +558,7 @@ export const en: Messages = {
     createToken: "Create token",
     tokenCreated: "Token created: copy it now, it won't be shown again.",
     claudeCode: "For Claude Code:",
-    urlKey: "For clients without custom headers (keep this URL private):",
+    urlKey: "Deprecated, for clients without custom headers only (the token ends up in URL logs; keep this URL private):",
     tokens: (n: number) => `Tokens · ${n}`,
     clients: (n: number) => `Connected apps · ${n}`,
     noClients: "No connected apps yet.",

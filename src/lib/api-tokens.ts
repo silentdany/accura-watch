@@ -27,10 +27,18 @@ export async function verifyApiToken(token: string): Promise<boolean> {
 
 export type AuthResult = "ok" | "missing" | "invalid";
 
+function logQueryKeyUse(req: Request): void {
+  const { pathname } = new URL(req.url);
+  const agent = (req.headers.get("user-agent") ?? "unknown").slice(0, 120);
+  console.warn(`[auth] deprecated ?key= token on ${pathname} (user-agent: ${agent}). Send Authorization: Bearer instead.`);
+}
+
 /**
- * API tokens (`aw_…`, including `?key=` for clients that can't send headers) and a
- * browser session open every API. OAuth access tokens (`awoa_…`) only open the MCP
- * resource they were issued for, and are never accepted from the query string.
+ * API tokens (`aw_…`) and a browser session open every API. OAuth access tokens
+ * (`awoa_…`) only open the MCP resource they were issued for, and are never accepted
+ * from the query string. `?key=aw_…` still works for clients that can't send headers,
+ * but it is deprecated: the token ends up in URL logs. Each use is logged (path and
+ * user agent, never the token) so its last users can be found before it is removed.
  */
 export async function authorizeRequest(req: Request, opts?: { resource?: string }): Promise<AuthResult> {
   const header = req.headers.get("authorization");
@@ -41,7 +49,11 @@ export async function authorizeRequest(req: Request, opts?: { resource?: string 
     if (!bearer || queryKey || !opts?.resource) return "invalid";
     return (await verifyOauthAccess(bearer, opts.resource)) ? "ok" : "invalid";
   }
-  if (token) return (await verifyApiToken(token)) ? "ok" : "invalid";
+  if (token) {
+    if (!(await verifyApiToken(token))) return "invalid";
+    if (!bearer) logQueryKeyUse(req);
+    return "ok";
+  }
   const session = await auth.api.getSession({ headers: req.headers }).catch(() => null);
   return session ? "ok" : "missing";
 }
