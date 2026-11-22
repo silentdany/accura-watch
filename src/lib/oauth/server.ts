@@ -360,6 +360,15 @@ function formResource(value: string, expected: string): OauthFailure | null {
   return null;
 }
 
+/**
+ * RFC 6749 §4.1.2: a code used twice revokes every token issued from it. Grants
+ * issued from a code (and their refresh rotations) share familyId = code id.
+ */
+async function replayedCode(codeId: string): Promise<OauthFailure> {
+  await prisma.oauthGrant.updateMany({ where: { familyId: codeId, revokedAt: null }, data: { revokedAt: new Date() } });
+  return fail("invalid_grant", "Authorization code was already used; tokens issued with it are revoked.");
+}
+
 export async function exchangeToken(params: URLSearchParams): Promise<TokenOk | OauthFailure> {
   const grant = params.get("grant_type") ?? "";
   const clientId = params.get("client_id") ?? "";
@@ -373,13 +382,14 @@ export async function exchangeToken(params: URLSearchParams): Promise<TokenOk | 
     const verifier = params.get("code_verifier") ?? "";
     if (!code || !redirectUri || !validCodeVerifier(verifier)) return fail("invalid_request", "code, redirect_uri and code_verifier are required.");
     const row = await prisma.oauthCode.findUnique({ where: { codeHash: sha256(code) } });
-    if (!row || row.consumedAt || row.expiresAt.getTime() < Date.now()) return fail("invalid_grant", "Authorization code is invalid or expired.");
+    if (row?.consumedAt) return replayedCode(row.id);
+    if (!row || row.expiresAt.getTime() < Date.now()) return fail("invalid_grant", "Authorization code is invalid or expired.");
     if (row.clientId !== client.id || row.redirectUri !== redirectUri) return fail("invalid_grant", "Authorization code does not match this client.");
     if (pkceS256(verifier) !== row.codeChallenge) return fail("invalid_grant", "PKCE verification failed.");
     const resourceError = formResource(params.get("resource") ?? "", row.resource);
     if (resourceError) return resourceError;
     const consumed = await prisma.oauthCode.updateMany({ where: { id: row.id, consumedAt: null }, data: { consumedAt: new Date() } });
-    if (consumed.count !== 1) return fail("invalid_grant", "Authorization code was already used.");
+    if (consumed.count !== 1) return replayedCode(row.id);
     return issueGrant(client.id, row.id, row.resource, row.scope);
   }
 

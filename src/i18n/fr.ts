@@ -562,7 +562,7 @@ export const fr = {
     createToken: "Créer un jeton",
     tokenCreated: "Jeton créé : copie-le maintenant, il ne sera plus affiché.",
     claudeCode: "Pour Claude Code :",
-    urlKey: "Pour les clients sans en-têtes personnalisés (garde cette adresse privée) :",
+    urlKey: "Déprécié, seulement pour les clients sans en-têtes personnalisés (le jeton finit dans les logs d'URL ; garde cette adresse privée) :",
     tokens: (n: number) => `Jetons · ${n}`,
     clients: (n: number) => `Applications connectées · ${n}`,
     noClients: "Aucune application connectée pour l'instant.",
